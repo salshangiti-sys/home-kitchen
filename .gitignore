@@ -16,6 +16,9 @@ supabase/.branches/
 playwright-report/
 test-results/
 
+# Machine-specific Claude preview config (contains local paths)
+.claude/launch.json
+
 # OS and editor files
 .DS_Store
 .vscode/
