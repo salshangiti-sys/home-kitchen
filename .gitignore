@@ -1,0 +1,22 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# Secrets: never commit real environment files
+.env
+.env.*
+!.env.example
+
+# Supabase local state
+supabase/.temp/
+supabase/.branches/
+
+# Test and tool output
+playwright-report/
+test-results/
+
+# OS and editor files
+.DS_Store
+.vscode/
+.idea/
