@@ -71,6 +71,20 @@
 - **Application (client) ID** فقط.
 - تأكيد أن `MS_CLIENT_SECRET` محفوظ في Supabase، **دون إرسال قيمته**.
 
+## القيم الحالية (غير سرية)
+
+سُجّل التطبيق في 2026-10-24 بهذه القيم:
+
+| البند | القيمة |
+|---|---|
+| الدليل | Default Directory، أُنشئ مع حساب Azure المجاني |
+| Application (client) ID | `f891e6b1-97d8-4453-a7ec-e98d2c25de42` |
+| Supported account types | Personal Microsoft accounts only (جهة الدخول: `consumers`) |
+| Redirect URI (Web) | `https://rknhlhrnncmfzkyyzgmd.supabase.co/functions/v1/ms-oauth-callback` |
+| الصلاحيات المفوّضة | `Notes.ReadWrite`، `offline_access`، `Files.ReadWrite.AppFolder`، `User.Read` |
+
+السر (`MS_CLIENT_SECRET`) لا يُكتب هنا. مكانه الوحيد إعدادات Edge Functions في Supabase.
+
 ## المراجع
 
 - تسجيل التطبيق: https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app

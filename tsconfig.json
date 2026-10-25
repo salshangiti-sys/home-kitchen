@@ -10,8 +10,12 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "skipLibCheck": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "vite.config.ts"]
+  // The OneNote modules are plain TypeScript (no Deno globals) so they are type-checked and
+  // tested here too; _shared/server and the function entry points are Deno-only.
+  "include": ["src", "vite.config.ts", "supabase/functions/_shared/onenote"]
 }

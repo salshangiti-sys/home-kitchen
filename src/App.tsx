@@ -1,25 +1,11 @@
 import { useEffect, useState } from 'react'
+import SyncLab from './spike/SyncLab'
 import { applyTheme, loadPreference, resolveTheme, savePreference, type ThemePreference } from './theme'
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'حسب الجهاز' },
   { value: 'light', label: 'فاتح' },
   { value: 'dark', label: 'داكن' },
-]
-
-// Lines that mix Arabic, English words and both digit systems, to check bidi and font coverage.
-const SAMPLE_LINES = [
-  'سلطة mixed leaves مع صوص الليمون',
-  '2 كوب طحين + ½ ملعقة صغيرة baking powder',
-  'الأرقام الغربية: 0123456789',
-  'الأرقام في المصدر: ٠١٢٣٤٥٦٧٨٩',
-]
-
-const WEIGHTS = [
-  { className: 'font-normal', label: 'عادي 400' },
-  { className: 'font-medium', label: 'متوسط 500' },
-  { className: 'font-semibold', label: 'شبه عريض 600' },
-  { className: 'font-bold', label: 'عريض 700' },
 ]
 
 function useThemePreference() {
@@ -68,33 +54,13 @@ export default function App() {
 
       <main className="flex flex-col gap-6">
         <section className="rounded-2xl border border-line bg-surface p-5">
-          <h2 className="mb-2 text-lg font-semibold">المرحلة 0: هيكل التطبيق</h2>
+          <h2 className="mb-2 text-lg font-semibold">المرحلة 0: مختبر مزامنة OneNote</h2>
           <p className="leading-relaxed text-muted">
-            هذه الصفحة للتحقق من الخط واتجاه الكتابة والوضعين الفاتح والداكن فقط. لا توجد وصفات أو بيانات أو مزامنة بعد.
+            أداة اختبار للمزامنة مع الدفتر التجريبي فقط. ليست مكتبة الوصفات، ولا تقرأ ولا تكتب في دفتر الوصفات الحقيقي.
           </p>
         </section>
 
-        <section className="rounded-2xl border border-line bg-surface p-5">
-          <h2 className="mb-3 text-lg font-semibold">عينة النصوص المختلطة</h2>
-          <ul className="flex list-disc flex-col gap-2 ps-5">
-            {SAMPLE_LINES.map((line) => (
-              <li key={line} dir="auto" className="leading-relaxed">
-                {line}
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-2xl border border-line bg-surface p-5">
-          <h2 className="mb-3 text-lg font-semibold">أوزان الخط</h2>
-          <div className="flex flex-col gap-2">
-            {WEIGHTS.map((weight) => (
-              <p key={weight.label} className={`text-lg ${weight.className}`}>
-                {weight.label}: مقادير الكبسة والصوص · IBM Plex Sans Arabic
-              </p>
-            ))}
-          </div>
-        </section>
+        <SyncLab />
       </main>
     </div>
   )

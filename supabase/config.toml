@@ -1,0 +1,14 @@
+# Supabase project settings used by the CLI and by deployments.
+project_id = "rknhlhrnncmfzkyyzgmd"
+
+# Every function checks the caller itself (requireUser in _shared/server/http.ts), because the
+# gateway's legacy JWT check does not cover the project's newer signing keys. ms-oauth-callback
+# has no caller token at all: the browser arrives from Microsoft with a one-time state.
+[functions.ms-oauth-start]
+verify_jwt = false
+
+[functions.ms-oauth-callback]
+verify_jwt = false
+
+[functions.onenote-sync]
+verify_jwt = false
