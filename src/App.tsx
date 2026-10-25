@@ -1,4 +1,10 @@
 import { useEffect, useState } from 'react'
+import { canEdit, SignIn, useAuth } from './auth'
+import ImportPage from './library/ImportPage'
+import LibraryPage from './library/LibraryPage'
+import RecipeEditor from './library/RecipeEditor'
+import RecipePage from './library/RecipePage'
+import { href, useRoute, type Route } from './router'
 import SyncLab from './spike/SyncLab'
 import { applyTheme, loadPreference, resolveTheme, savePreference, type ThemePreference } from './theme'
 
@@ -7,6 +13,9 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'light', label: 'فاتح' },
   { value: 'dark', label: 'داكن' },
 ]
+
+// The Microsoft sign-in returns to /?ms=…, which belongs to the OneNote sync lab.
+if (new URLSearchParams(window.location.search).has('ms') && !window.location.hash) window.location.hash = href.lab
 
 function useThemePreference() {
   const [pref, setPref] = useState<ThemePreference>(loadPreference)
@@ -27,13 +36,25 @@ function useThemePreference() {
   return [pref, choose] as const
 }
 
+const NAV: Array<{ label: string; to: string; match: Route['name'][]; editorsOnly?: boolean }> = [
+  { label: 'الوصفات', to: href.library, match: ['library', 'recipe'] },
+  { label: 'وصفة جديدة', to: href.new, match: ['new'], editorsOnly: true },
+  { label: 'استيراد', to: href.import, match: ['import'], editorsOnly: true },
+  { label: 'مزامنة OneNote', to: href.lab, match: ['lab'], editorsOnly: true },
+]
+
 export default function App() {
   const [pref, choosePref] = useThemePreference()
+  const route = useRoute()
+  const auth = useAuth()
+  const editor = canEdit(auth.role)
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-6 px-4 py-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">مطبخ البيت</h1>
+    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-5">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <a href={href.library}>
+          <h1 className="text-2xl font-bold">مطبخ البيت</h1>
+        </a>
         <div role="radiogroup" aria-label="المظهر" className="flex rounded-xl border border-line bg-surface p-1">
           {THEME_OPTIONS.map((option) => (
             <button
@@ -42,7 +63,7 @@ export default function App() {
               role="radio"
               aria-checked={pref === option.value}
               onClick={() => choosePref(option.value)}
-              className={`min-h-11 rounded-lg px-4 text-sm font-medium transition-colors ${
+              className={`min-h-9 rounded-lg px-3 text-sm font-medium transition-colors ${
                 pref === option.value ? 'bg-accent text-on-accent' : 'text-muted hover:text-ink'
               }`}
             >
@@ -52,16 +73,54 @@ export default function App() {
         </div>
       </header>
 
-      <main className="flex flex-col gap-6">
-        <section className="rounded-2xl border border-line bg-surface p-5">
-          <h2 className="mb-2 text-lg font-semibold">المرحلة 0: مختبر مزامنة OneNote</h2>
-          <p className="leading-relaxed text-muted">
-            أداة اختبار للمزامنة مع الدفتر التجريبي فقط. ليست مكتبة الوصفات، ولا تقرأ ولا تكتب في دفتر الوصفات الحقيقي.
-          </p>
-        </section>
+      {auth.session && (
+        <nav aria-label="الأقسام الرئيسية" className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4">
+          {NAV.filter((item) => editor || !item.editorsOnly).map((item) => {
+            const active = item.match.includes(route.name) || (route.name === 'edit' && item.to === href.library)
+            return (
+              <a
+                key={item.to}
+                href={item.to}
+                aria-current={active ? 'page' : undefined}
+                className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium ${active ? 'border-accent text-ink' : 'border-transparent text-muted'}`}
+              >
+                {item.label}
+              </a>
+            )
+          })}
+        </nav>
+      )}
 
-        <SyncLab />
+      <main className="flex flex-col gap-6 pb-10">
+        {!auth.ready ? null : !auth.session ? <SignIn /> : <Screen route={route} editor={editor} userId={auth.session.user.id} />}
       </main>
     </div>
   )
+}
+
+function Screen({ route, editor, userId }: { route: Route; editor: boolean; userId: string }) {
+  switch (route.name) {
+    case 'library':
+      return <LibraryPage canEdit={editor} />
+    case 'recipe':
+      return <RecipePage key={route.id} id={route.id} canEdit={editor} userId={userId} />
+    case 'edit':
+      return editor ? <RecipeEditor key={route.id} id={route.id} /> : <RecipePage id={route.id} canEdit={false} userId={userId} />
+    case 'new':
+      return editor ? <RecipeEditor key="new" id={null} /> : <LibraryPage canEdit={false} />
+    case 'import':
+      return editor ? <ImportPage /> : <LibraryPage canEdit={false} />
+    case 'lab':
+      return (
+        <>
+          <section className="rounded-2xl border border-line bg-surface p-5">
+            <h2 className="mb-2 text-lg font-semibold">مختبر مزامنة OneNote (المرحلة 0)</h2>
+            <p className="leading-relaxed text-muted">
+              أداة اختبار للمزامنة مع الدفتر التجريبي فقط. وصفاته منفصلة عن مكتبة الوصفات، ولا يقرأ ولا يكتب في دفتر الوصفات الحقيقي.
+            </p>
+          </section>
+          <SyncLab />
+        </>
+      )
+  }
 }

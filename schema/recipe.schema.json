@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/recipe.schema.json",
+  "title": "Recipe (exported from Saffana's OneNote)",
+  "description": "One record per OneNote recipe page. Text fields keep the author's original Arabic wording verbatim. Structured fields (quantity/unit/item, tags, times) are left null when the source does not state them explicitly - never guessed.",
+  "type": "object",
+  "required": ["id", "title", "status", "category", "sources", "ingredient_groups", "steps", "notes", "onenote", "raw_text"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "description": "Stable slug: <section-slug>-<n>, e.g. salads-007" },
+    "title": { "type": "string", "description": "Page title exactly as in OneNote" },
+    "language": { "type": "string", "default": "ar" },
+    "status": {
+      "type": "string",
+      "enum": ["complete", "partial", "link_only", "note_only"],
+      "description": "complete = ingredients and/or steps written; partial = some written content but clearly incomplete; link_only = only a video/web link; note_only = free notes with no recipe structure"
+    },
+    "category": {
+      "type": "object",
+      "required": ["section"],
+      "additionalProperties": false,
+      "properties": {
+        "notebook": { "type": "string" },
+        "section_group": { "type": ["string", "null"] },
+        "section": { "type": "string", "description": "OneNote section name, e.g. سلطات" },
+        "section_en": { "type": ["string", "null"], "description": "English label for UI, e.g. Salads" }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "additionalProperties": false,
+        "properties": {
+          "url": { "type": "string" },
+          "platform": { "type": "string", "enum": ["tiktok", "youtube", "instagram", "snapchat", "web", "other"] },
+          "label": { "type": ["string", "null"], "description": "Link text if different from the URL" }
+        }
+      }
+    },
+    "ingredient_groups": {
+      "type": "array",
+      "description": "Groups in page order. name = null for the main/unnamed group; otherwise the sub-heading the author used (e.g. الصوص).",
+      "items": {
+        "type": "object",
+        "required": ["name", "items"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": ["string", "null"] },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["text"],
+              "additionalProperties": false,
+              "properties": {
+                "text": { "type": "string", "description": "Verbatim line as written" },
+                "quantity": { "type": ["number", "null"] },
+                "unit": { "type": ["string", "null"] },
+                "item": { "type": ["string", "null"] },
+                "note": { "type": ["string", "null"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["order", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "order": { "type": "integer", "minimum": 1 },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "notes": { "type": "array", "items": { "type": "string" }, "description": "The author's own notes / tips (ملاحظاتي), verbatim" },
+    "tags": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "For the meal-planning app. Left empty/null on export - to be filled by the user.",
+      "properties": {
+        "meal_types": { "type": "array", "items": { "type": "string", "enum": ["breakfast", "lunch", "dinner", "snack", "dessert", "drink", "side"] } },
+        "kid_friendly": { "type": ["boolean", "null"] },
+        "lunchbox": { "type": ["boolean", "null"] },
+        "custom": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "servings": { "type": ["number", "null"] },
+    "prep_time_min": { "type": ["number", "null"] },
+    "cook_time_min": { "type": ["number", "null"] },
+    "media": {
+      "type": "array",
+      "description": "Images / embedded videos on the page (not exported as files - placeholders only)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": { "type": "string", "enum": ["image", "video_embed", "file"] },
+          "description": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "onenote": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "notebook": { "type": "string" },
+        "section": { "type": "string" },
+        "page_id": { "type": ["string", "null"] },
+        "created": { "type": ["string", "null"], "description": "ISO 8601 with +03:00 as shown on the page" }
+      }
+    },
+    "flags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Data-quality flags for review, e.g. possible_duplicate:<id>, method_inside_ingredients, quantities_missing, title_mismatch"
+    },
+    "raw_text": { "type": "string", "description": "Full page text verbatim (safety net: the source of truth if structured fields are wrong)" }
+  }
+}
