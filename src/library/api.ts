@@ -53,10 +53,13 @@ export async function listRecipes(): Promise<{ recipes: RecipeSummary[]; favorit
   fail(recipes.error)
   fail(favorites.error)
   fail(flags.error)
+  // Favorites and flags of deleted recipes stay in their tables; only shown recipes count.
+  const shown = new Set((recipes.data as RecipeSummary[]).map((r) => r.id))
+  const ids = (rows: Array<{ recipe_id: unknown }>) => new Set(rows.map((row) => row.recipe_id as string).filter((id) => shown.has(id)))
   return {
     recipes: recipes.data as RecipeSummary[],
-    favorites: new Set(favorites.data.map((f) => f.recipe_id as string)),
-    openFlags: new Set(flags.data.map((f) => f.recipe_id as string)),
+    favorites: ids(favorites.data),
+    openFlags: ids(flags.data),
   }
 }
 
