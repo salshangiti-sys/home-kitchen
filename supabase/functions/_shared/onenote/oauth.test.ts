@@ -15,6 +15,7 @@ describe('Microsoft OAuth helpers', () => {
     expect(url.searchParams.get('code_challenge_method')).toBe('S256')
     expect(url.searchParams.get('scope')).toBe('offline_access User.Read Notes.ReadWrite Files.ReadWrite.AppFolder')
     expect(url.searchParams.get('redirect_uri')).toBe(CONFIG.redirectUri)
+    expect(url.searchParams.get('response_mode')).toBe('form_post')
   })
 
   it('exchanges a code and returns the new tokens', async () => {

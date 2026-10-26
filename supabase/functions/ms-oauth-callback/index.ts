@@ -1,5 +1,6 @@
-// Microsoft redirects here after sign-in. Deployed without JWT verification because the browser
-// arrives from Microsoft; the one-time state from ms-oauth-start identifies the user instead.
+// Microsoft sends the browser here after sign-in. Deployed without JWT verification because the
+// browser arrives from Microsoft; the one-time state from ms-oauth-start identifies the user instead.
+// The code arrives as a form POST (response_mode=form_post), so it is never part of a logged URL.
 // Exchanges the code, keeps the refresh token in Vault, and sends the browser back to the app.
 
 import { APP_ORIGINS, adminClient, oauthConfig } from '../_shared/server/http.ts'
@@ -8,11 +9,20 @@ import { exchangeCode } from '../_shared/onenote/oauth.ts'
 function back(returnTo: string, result: string): Response {
   const url = new URL(returnTo)
   url.searchParams.set('ms', result)
-  return Response.redirect(url.toString(), 302)
+  // 303: after a POST, the browser follows with a GET.
+  return Response.redirect(url.toString(), 303)
+}
+
+// The response fields from Microsoft: in the POST body (form_post), or in the query string for a
+// request started before the switch to form_post.
+async function responseParams(req: Request): Promise<URLSearchParams> {
+  if (req.method !== 'POST') return new URL(req.url).searchParams
+  const form = await req.formData()
+  return new URLSearchParams([...form.entries()].map(([key, value]) => [key, String(value)]))
 }
 
 Deno.serve(async (req) => {
-  const params = new URL(req.url).searchParams
+  const params = await responseParams(req)
   const state = params.get('state') ?? ''
   const admin = adminClient()
 

@@ -40,7 +40,8 @@ export function authorizeUrl(config: Pick<OAuthConfig, 'clientId' | 'redirectUri
     client_id: config.clientId,
     response_type: 'code',
     redirect_uri: config.redirectUri,
-    response_mode: 'query',
+    // The code comes back in a POST body, not the URL, so it never lands in request logs.
+    response_mode: 'form_post',
     scope: SCOPES.join(' '),
     state,
     code_challenge: challenge,
