@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { canEdit, SignIn, useAuth } from './auth'
 import ImportPage from './library/ImportPage'
 import LibraryPage from './library/LibraryPage'
+import { checkIfDue, loadLibrary } from './library/onenote'
+import OneNotePage from './library/OneNotePage'
 import RecipeEditor from './library/RecipeEditor'
 import RecipePage from './library/RecipePage'
 import { href, useRoute, type Route } from './router'
@@ -14,7 +16,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'dark', label: 'داكن' },
 ]
 
-// The Microsoft sign-in returns to /?ms=…, which belongs to the OneNote sync lab.
+// The Microsoft sign-in returns to /?ms=… (the lab) or /?ms=…#/onenote (the OneNote page).
 if (new URLSearchParams(window.location.search).has('ms') && !window.location.hash) window.location.hash = href.lab
 
 function useThemePreference() {
@@ -36,11 +38,22 @@ function useThemePreference() {
   return [pref, choose] as const
 }
 
+// While the app is open, look in the recipe notebook for new and changed pages every few hours.
+function useNotebookCheck(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return
+    const run = () => loadLibrary().then(checkIfDue, () => undefined)
+    run()
+    const timer = window.setInterval(run, 15 * 60 * 1000)
+    return () => window.clearInterval(timer)
+  }, [enabled])
+}
+
 const NAV: Array<{ label: string; to: string; match: Route['name'][]; editorsOnly?: boolean }> = [
   { label: 'الوصفات', to: href.library, match: ['library', 'recipe'] },
   { label: 'وصفة جديدة', to: href.new, match: ['new'], editorsOnly: true },
   { label: 'استيراد', to: href.import, match: ['import'], editorsOnly: true },
-  { label: 'مزامنة OneNote', to: href.lab, match: ['lab'], editorsOnly: true },
+  { label: 'OneNote', to: href.onenote, match: ['onenote', 'lab'], editorsOnly: true },
 ]
 
 export default function App() {
@@ -48,6 +61,7 @@ export default function App() {
   const route = useRoute()
   const auth = useAuth()
   const editor = canEdit(auth.role)
+  useNotebookCheck(auth.session != null && editor)
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-5">
@@ -110,6 +124,8 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return editor ? <RecipeEditor key="new" id={null} /> : <LibraryPage canEdit={false} />
     case 'import':
       return editor ? <ImportPage /> : <LibraryPage canEdit={false} />
+    case 'onenote':
+      return editor ? <OneNotePage /> : <LibraryPage canEdit={false} />
     case 'lab':
       return (
         <>

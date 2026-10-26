@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { docToFields, fieldsToDoc, emptyFields, platformOf } from './editorFields'
+import { docToFields, fieldsToDoc, emptyFields, planningToDoc, platformOf } from './editorFields'
 import { buildFileReport, chunk, parseRecipeFile, summarizeRun, ImportFileError } from './importReport'
 import { isRecipeDoc, recipeErrors } from './validate'
 import { LINK_ONLY, SALAD } from './fixtures'
@@ -67,6 +67,17 @@ describe('editor fields', () => {
     expect(platformOf('https://youtu.be/x')).toBe('youtube')
     expect(platformOf('https://vm.tiktok.com/x')).toBe('tiktok')
     expect(platformOf('not a link')).toBe('other')
+  })
+})
+
+describe('planning fields of a recipe read from OneNote', () => {
+  it('change only the tags, servings and times', () => {
+    const fields = { ...docToFields(SALAD), title: 'غيّرته', ingredients: 'سطر جديد', mealTypes: ['dinner' as const], servings: '6', customTags: 'صيفي' }
+    const doc = planningToDoc(fields, SALAD)
+    expect(doc).toEqual({ ...SALAD, tags: { ...doc.tags }, servings: 6, prep_time_min: doc.prep_time_min, cook_time_min: doc.cook_time_min })
+    expect(doc.title).toBe(SALAD.title)
+    expect(doc.ingredient_groups).toEqual(SALAD.ingredient_groups)
+    expect(doc.tags).toMatchObject({ meal_types: ['dinner'], custom: ['صيفي'] })
   })
 })
 

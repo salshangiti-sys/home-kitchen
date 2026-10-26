@@ -17,7 +17,7 @@ export async function callFunction<T>(name: string, body: Record<string, unknown
     const context = (error as { context?: unknown }).context
     const detail = context instanceof Response ? await context.json().catch(() => null) : null
     const cause = context instanceof Error ? ` (${context.message})` : ''
-    throw new Error(detail?.error ?? `${error.message}${cause}`)
+    throw Object.assign(new Error(detail?.error ?? `${error.message}${cause}`), { code: detail?.code as string | undefined })
   }
   return data as T
 }

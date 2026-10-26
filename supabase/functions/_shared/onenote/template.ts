@@ -20,8 +20,8 @@ export const REF_DATA_ID = 'hk-ref'
 export const RECIPE_ID_LABEL = 'معرّف الوصفة:'
 export const BULLET = '•'
 
-const RLE = '‫'
-const PDF = '‬'
+const RLE = '\u202B'
+const PDF = '\u202C'
 const RIGHT = 'text-align:right'
 
 export function escapeHtml(text: string): string {
@@ -85,11 +85,20 @@ export interface PageInput {
   title: string
   sections: RecipeSections
   appUrl: string | null
+  // Give every empty section an empty line under its heading, ready to type in (a new page made
+  // from the app to be filled in OneNote).
+  blankLines?: boolean
 }
+
+// An empty right-to-left line: the no-break space keeps OneNote from dropping it.
+const BLANK_LINE = rtl('p', '\u00a0')
 
 export function buildPageHtml(input: PageInput): string {
   const sections = (['src', 'ing', 'steps', 'notes'] as const)
-    .map((key) => buildSectionHtml(key, input.sections))
+    .map((key) => {
+      const html = buildSectionHtml(key, input.sections)
+      return input.blankLines && sectionLines(key, input.sections).length === 1 ? html.replace(/<\/div>$/, `${BLANK_LINE}</div>`) : html
+    })
     .join('')
   return (
     '<!DOCTYPE html>' +

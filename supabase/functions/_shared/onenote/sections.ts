@@ -43,10 +43,10 @@ export function emptySections(): RecipeSections {
 
 // Bidi control marks and non-breaking spaces show up when text passes through OneNote clients;
 // they do not change what the author wrote, so they are ignored when comparing.
-const INVISIBLE_MARKS = /[‎‏‪-‮⁦-⁩﻿]/g
+const INVISIBLE_MARKS = /[\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g
 
 export function normalizeForCompare(text: string): string {
-  return text.replace(INVISIBLE_MARKS, '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim()
+  return text.replace(INVISIBLE_MARKS, '').replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 function canonical(key: MergeKey, state: PageState): string {

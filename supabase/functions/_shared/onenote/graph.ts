@@ -158,11 +158,31 @@ export class OneNoteClient {
     })
   }
 
+  // Every page in a section (title, last change, links), following OneNote's paging.
+  async listSectionPages(sectionId: string): Promise<PageMeta[]> {
+    const pages: PageMeta[] = []
+    let path: string | null =
+      `/sections/${encodeURIComponent(sectionId)}/pages?$select=id,title,lastModifiedDateTime,links&$expand=parentNotebook,parentSection&$top=100`
+    while (path) {
+      const response = await this.request('GET', path)
+      const body = (await response.json()) as { value: RawPage[]; '@odata.nextLink'?: string }
+      pages.push(...body.value.map(toMeta))
+      const next = body['@odata.nextLink']
+      path = next ? next.slice(next.indexOf('/me/onenote') + '/me/onenote'.length) : null
+    }
+    return pages
+  }
+
   async findNotebook(displayName: string): Promise<{ id: string; displayName: string } | null> {
     const filter = encodeURIComponent(`displayName eq '${displayName.replace(/'/g, "''")}'`)
     const response = await this.request('GET', `/notebooks?$filter=${filter}&$select=id,displayName`)
     const { value } = (await response.json()) as { value: Array<{ id: string; displayName: string }> }
     return value[0] ?? null
+  }
+
+  async listNotebooks(): Promise<Array<{ id: string; displayName: string }>> {
+    const response = await this.request('GET', '/notebooks?$select=id,displayName&$orderby=displayName')
+    return ((await response.json()) as { value: Array<{ id: string; displayName: string }> }).value
   }
 
   async listSections(notebookId: string): Promise<Array<{ id: string; displayName: string }>> {
@@ -184,6 +204,26 @@ export class OneNoteClient {
       contentType: 'application/json',
     })
     return (await response.json()) as { id: string; displayName: string }
+  }
+}
+
+// What the app may do in the recipe notebook (وصفاتي): read pages and create new ones. There is
+// deliberately no way to change or delete an existing page through this type.
+export type ReadCreateGraph = Pick<
+  OneNoteClient,
+  'getPageMeta' | 'getPageContent' | 'createPage' | 'findNotebook' | 'listNotebooks' | 'listSections' | 'listSectionPages'
+>
+
+// Wraps a client so that only the read/create methods exist at run time too.
+export function readCreateOnly(client: OneNoteClient): ReadCreateGraph {
+  return {
+    getPageMeta: (id) => client.getPageMeta(id),
+    getPageContent: (id) => client.getPageContent(id),
+    createPage: (sectionId, html) => client.createPage(sectionId, html),
+    findNotebook: (name) => client.findNotebook(name),
+    listNotebooks: () => client.listNotebooks(),
+    listSections: (id) => client.listSections(id),
+    listSectionPages: (id) => client.listSectionPages(id),
   }
 }
 

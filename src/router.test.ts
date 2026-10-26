@@ -10,6 +10,7 @@ describe('parseHash', () => {
     ['#/new', { name: 'new' }],
     ['#/import', { name: 'import' }],
     ['#/lab', { name: 'lab' }],
+    ['#/onenote', { name: 'onenote' }],
     ['#/unknown', { name: 'library' }],
   ])('%s', (hash, route) => {
     expect(parseHash(hash)).toEqual(route)

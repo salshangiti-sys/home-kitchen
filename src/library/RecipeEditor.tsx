@@ -1,12 +1,19 @@
 // Add a recipe, or edit one, with the same template as the OneNote pages. Lines are saved exactly
 // as typed; nothing is filled in automatically. Saving checks the recipe's version, so an edit
 // made elsewhere in the meantime is never overwritten.
+//
+// With the recipe notebook linked:
+// - a recipe that has a OneNote page is edited in OneNote; here only the app's own fields
+//   (tags, planning) can change;
+// - a new recipe gets a new page in the notebook, written once: either an empty page with the
+//   template headings to fill in OneNote, or the page made from what is typed here.
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { href, navigate } from '../router'
-import { Button, Notice } from '../ui'
+import { Button, LinkButton, Notice } from '../ui'
 import { listRecipes, loadRecipe, saveRecipe } from './api'
-import { docToFields, emptyFields, fieldsToDoc, GROUP_PREFIX, isFromOneNote, type EditorFields, type TriState } from './editorFields'
+import { docToFields, emptyFields, fieldsToDoc, GROUP_PREFIX, isFromOneNote, planningToDoc, type EditorFields, type TriState } from './editorFields'
+import { createPage, loadLibrary, loadRecipePage, type LibraryInfo, type RecipePage } from './onenote'
 import { MEAL_TYPE_LABELS, MEAL_TYPES, STATUS_LABELS, type RecipeDoc, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
 
@@ -16,10 +23,15 @@ export default function RecipeEditor({ id }: { id: string | null }) {
   const [sections, setSections] = useState<string[]>([])
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [library, setLibrary] = useState<LibraryInfo | null | undefined>(undefined)
+  const [page, setPage] = useState<RecipePage | null | undefined>(id ? undefined : null)
+  const [blank, setBlank] = useState(true)
 
   useEffect(() => {
     listRecipes().then(({ recipes }) => setSections([...new Set(recipes.map((r) => r.section))].sort((a, b) => a.localeCompare(b, 'ar'))))
+    loadLibrary().then(setLibrary, () => setLibrary(null))
     if (!id) return
+    loadRecipePage(id).then(setPage, () => setPage(null))
     loadRecipe(id).then(
       (loaded) => {
         if (!loaded) return setMessage({ text: 'لم تُعثر على هذه الوصفة.', error: true })
@@ -31,17 +43,30 @@ export default function RecipeEditor({ id }: { id: string | null }) {
   }, [id])
 
   const set = <K extends keyof EditorFields>(key: K, value: EditorFields[K]) => setFields((f) => (f ? { ...f, [key]: value } : f))
-  const problems = useMemo(() => (fields ? checkFields(fields) : []), [fields])
+  // planning: the recipe's text is in OneNote. newPage: a new recipe gets a OneNote page.
+  const planning = !!(id && page)
+  const newPage = !id && !!library
+  const sectionNames = newPage ? library.sections.map((s) => s.name) : sections
+  const problems = useMemo(() => (fields && !planning ? checkFields(fields, newPage ? library!.sections.map((s) => s.name) : null) : []), [fields, planning, newPage, library])
 
-  if (!fields) return message ? <Notice tone="error">{message.text}</Notice> : <p className="text-muted">جارٍ التحميل…</p>
+  if (!fields || library === undefined || page === undefined) return message ? <Notice tone="error">{message.text}</Notice> : <p className="text-muted">جارٍ التحميل…</p>
 
   const save = async () => {
     setSaving(true)
     setMessage(null)
     try {
-      const doc = fieldsToDoc(fields, before?.doc ?? null)
+      if (planning) {
+        await saveRecipe(planningToDoc(fields, before!.doc), before!.version)
+        return navigate(href.recipe(id!))
+      }
+      const typed = newPage && blank ? { ...fields, ingredients: '', steps: '', notes: '', status: fields.sources.trim() ? ('link_only' as const) : ('note_only' as const) } : fields
+      const doc = fieldsToDoc(typed, before?.doc ?? null)
       const errors = recipeErrors({ ...doc, id: doc.id || 'new' })
       if (errors.length) throw new Error(`الوصفة لا تطابق المخطط:\n${errors.join('\n')}`)
+      if (newPage) {
+        const created = await createPage(doc, fields.section.trim(), blank)
+        return navigate(href.recipe(created.recipeId))
+      }
       const savedId = await saveRecipe(doc, before?.version ?? null)
       navigate(href.recipe(savedId))
     } catch (e) {
@@ -51,6 +76,7 @@ export default function RecipeEditor({ id }: { id: string | null }) {
   }
 
   const imported = before ? isFromOneNote(before.doc) : false
+  const showText = !planning && !(newPage && blank)
 
   return (
     <form
@@ -61,30 +87,73 @@ export default function RecipeEditor({ id }: { id: string | null }) {
       }}
     >
       <a href={id ? href.recipe(id) : href.library} className="text-sm text-accent">→ رجوع بدون حفظ</a>
-      <h2 className="text-2xl font-bold">{id ? 'تعديل الوصفة' : 'وصفة جديدة'}</h2>
+      <h2 className="text-2xl font-bold">{planning ? 'الوسوم والتخطيط' : id ? 'تعديل الوصفة' : 'وصفة جديدة'}</h2>
 
-      <Field label="اسم الوصفة">
-        <input dir="auto" required value={fields.title} onChange={(e) => set('title', e.target.value)} className={INPUT} />
-      </Field>
+      {planning && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4">
+          <p dir="auto" className="font-semibold">{fields.title}</p>
+          <p className="text-sm text-muted">نص هذه الوصفة في صفحتها في OneNote، ويُعدّل هناك. يقرأ التطبيق الصفحة كلما فتحتِ الوصفة. هنا تعدّلين ما يخص التطبيق فقط.</p>
+          {page?.web_url && (
+            <div>
+              <LinkButton external kind="primary" href={page.web_url}>تعديل في OneNote ↗</LinkButton>
+            </div>
+          )}
+        </div>
+      )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="القسم" hint="مثل: سلطات، شوربات، حلويات">
-          <input dir="auto" required list="hk-sections" value={fields.section} onChange={(e) => set('section', e.target.value)} className={INPUT} />
-          <datalist id="hk-sections">
-            {sections.map((s) => <option key={s} value={s} />)}
-          </datalist>
-        </Field>
-        <Field label="نوع الصفحة">
-          <select value={fields.status} onChange={(e) => set('status', e.target.value as RecipeStatus)} className={INPUT}>
-            {(Object.keys(STATUS_LABELS) as RecipeStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-          </select>
-        </Field>
-      </div>
+      {!id && !library && (
+        <Notice>دفتر الوصفات في OneNote غير مربوط بعد، فستُحفظ الوصفة في التطبيق فقط. <a href={href.onenote} className="underline">اربطي الدفتر</a> لتُنشأ لها صفحة في OneNote.</Notice>
+      )}
 
-      <TextArea label="المصدر" hint="سطر لكل رابط: «الاسم | الرابط» أو الرابط فقط" rows={2} value={fields.sources} onChange={(v) => set('sources', v)} ltrPlaceholder="https://…" />
-      <TextArea label="المقادير" hint={`سطر لكل مكوّن، كما تكتبينه. سطر يبدأ بـ «${GROUP_PREFIX.trim()}» يبدأ مجموعة، مثل: ${GROUP_PREFIX}الصوص`} rows={7} value={fields.ingredients} onChange={(v) => set('ingredients', v)} />
-      <TextArea label="الطريقة" hint="سطر لكل خطوة. الترقيم يُضاف تلقائيًا عند العرض." rows={6} value={fields.steps} onChange={(v) => set('steps', v)} />
-      <TextArea label="ملاحظاتي" hint="سطر لكل ملاحظة" rows={3} value={fields.notes} onChange={(v) => set('notes', v)} />
+      {newPage && (
+        <fieldset className="flex flex-col gap-2 rounded-2xl border border-line p-4">
+          <legend className="px-1 font-semibold">أين تكتبين الوصفة؟</legend>
+          <Choice checked={blank} onChange={() => setBlank(true)} title="أنشئ صفحة فارغة في OneNote" hint={`صفحة جديدة في «${library!.notebook_name}» بالعنوان والقالب (المصدر، المقادير، الطريقة، ملاحظاتي)، تكملينها في OneNote.`} />
+          <Choice checked={!blank} onChange={() => setBlank(false)} title="اكتبيها هنا" hint="تكتبين الوصفة في النموذج، ويُنشئ التطبيق صفحتها في OneNote مرة واحدة. بعدها تُعدّل في OneNote." />
+        </fieldset>
+      )}
+
+      {!planning && (
+        <>
+          <Field label="اسم الوصفة">
+            <input dir="auto" required value={fields.title} onChange={(e) => set('title', e.target.value)} className={INPUT} />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {newPage ? (
+              <Field label="القسم في OneNote">
+                <select required value={fields.section} onChange={(e) => set('section', e.target.value)} className={INPUT}>
+                  <option value="">اختاري القسم…</option>
+                  {sectionNames.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </Field>
+            ) : (
+              <Field label="القسم" hint="مثل: سلطات، شوربات، حلويات">
+                <input dir="auto" required list="hk-sections" value={fields.section} onChange={(e) => set('section', e.target.value)} className={INPUT} />
+                <datalist id="hk-sections">
+                  {sectionNames.map((s) => <option key={s} value={s} />)}
+                </datalist>
+              </Field>
+            )}
+            {showText && (
+              <Field label="نوع الصفحة">
+                <select value={fields.status} onChange={(e) => set('status', e.target.value as RecipeStatus)} className={INPUT}>
+                  {(Object.keys(STATUS_LABELS) as RecipeStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+                </select>
+              </Field>
+            )}
+          </div>
+
+          <TextArea label="المصدر" hint="سطر لكل رابط: «الاسم | الرابط» أو الرابط فقط" rows={2} value={fields.sources} onChange={(v) => set('sources', v)} ltrPlaceholder="https://…" />
+        </>
+      )}
+      {showText && (
+        <>
+          <TextArea label="المقادير" hint={`سطر لكل مكوّن، كما تكتبينه. سطر يبدأ بـ «${GROUP_PREFIX.trim()}» يبدأ مجموعة، مثل: ${GROUP_PREFIX}الصوص`} rows={7} value={fields.ingredients} onChange={(v) => set('ingredients', v)} />
+          <TextArea label="الطريقة" hint="سطر لكل خطوة. الترقيم يُضاف تلقائيًا عند العرض." rows={6} value={fields.steps} onChange={(v) => set('steps', v)} />
+          <TextArea label="ملاحظاتي" hint="سطر لكل ملاحظة" rows={3} value={fields.notes} onChange={(v) => set('notes', v)} />
+        </>
+      )}
 
       <fieldset className="flex flex-col gap-4 rounded-2xl border border-line p-4">
         <legend className="px-1 font-semibold">للتخطيط (اختياري)</legend>
@@ -116,28 +185,35 @@ export default function RecipeEditor({ id }: { id: string | null }) {
         <Field label="وسوم خاصة" hint="افصلي بينها بفاصلة، مثل: شتوي، سريع">
           <input dir="auto" value={fields.customTags} onChange={(e) => set('customTags', e.target.value)} className={INPUT} />
         </Field>
-        <Field label="اسم القسم بالإنجليزية" hint="يُستخدم في معرّف الوصفات الجديدة فقط، مثل Salads">
-          <input dir="ltr" value={fields.sectionEn} onChange={(e) => set('sectionEn', e.target.value)} className={INPUT} />
-        </Field>
+        {!planning && (
+          <Field label="اسم القسم بالإنجليزية" hint="يُستخدم في معرّف الوصفات الجديدة فقط، مثل Salads">
+            <input dir="ltr" value={fields.sectionEn} onChange={(e) => set('sectionEn', e.target.value)} className={INPUT} />
+          </Field>
+        )}
       </fieldset>
 
-      {imported && (
+      {imported && !planning && (
         <p className="text-sm text-muted">هذه الوصفة مستوردة من OneNote. «النص الأصلي» يبقى كما كان في الصفحة، وتعديلك يُحفظ في الأقسام أعلاه.</p>
       )}
       {problems.length > 0 && <Notice>{problems.join('\n')}</Notice>}
       {message && <Notice tone={message.error ? 'error' : 'plain'}>{message.text}</Notice>}
 
       <div className="sticky bottom-0 -mx-4 flex gap-2 border-t border-line bg-bg px-4 py-3">
-        <Button type="submit" disabled={saving || problems.length > 0}>{saving ? 'جارٍ الحفظ…' : 'احفظ'}</Button>
+        <Button type="submit" disabled={saving || problems.length > 0}>
+          {saving ? 'جارٍ الحفظ…' : newPage ? (blank ? 'أنشئي الصفحة في OneNote' : 'احفظي وأنشئي الصفحة') : 'احفظ'}
+        </Button>
       </div>
     </form>
   )
 }
 
-function checkFields(fields: EditorFields): string[] {
+// oneNoteSections: for a new page, the section has to be one of the notebook's sections.
+function checkFields(fields: EditorFields, oneNoteSections: string[] | null): string[] {
   const problems: string[] = []
   if (!fields.title.trim()) problems.push('اكتبي اسم الوصفة.')
-  if (!fields.section.trim()) problems.push('اختاري القسم أو اكتبي قسمًا جديدًا.')
+  if (oneNoteSections ? !oneNoteSections.includes(fields.section) : !fields.section.trim()) {
+    problems.push(oneNoteSections ? 'اختاري قسم OneNote الذي تُنشأ فيه الصفحة.' : 'اختاري القسم أو اكتبي قسمًا جديدًا.')
+  }
   const badLinks = fields.sources
     .split('\n')
     .map((line) => line.split('|').at(-1)!.trim())
@@ -163,6 +239,18 @@ function TextArea({ label, hint, rows, value, onChange, ltrPlaceholder }: { labe
     <Field label={label} hint={hint}>
       <textarea dir="auto" rows={rows} value={value} placeholder={ltrPlaceholder} onChange={(e) => onChange(e.target.value)} className="w-full rounded-xl border border-line bg-bg p-3 leading-relaxed" />
     </Field>
+  )
+}
+
+function Choice({ checked, onChange, title, hint }: { checked: boolean; onChange: () => void; title: string; hint: string }) {
+  return (
+    <label className={`flex cursor-pointer gap-3 rounded-xl border p-3 ${checked ? 'border-accent' : 'border-line'}`}>
+      <input type="radio" name="hk-where" className="mt-1 accent-[var(--accent)]" checked={checked} onChange={onChange} />
+      <span className="flex flex-col gap-0.5">
+        <span className="font-medium">{title}</span>
+        <span className="text-sm text-muted">{hint}</span>
+      </span>
+    </label>
   )
 }
 

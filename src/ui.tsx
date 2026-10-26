@@ -44,9 +44,9 @@ export function Button({
   )
 }
 
-export function LinkButton({ href, children, kind = 'plain' }: { href: string; children: ReactNode; kind?: Kind }) {
+export function LinkButton({ href, children, kind = 'plain', external }: { href: string; children: ReactNode; kind?: Kind; external?: boolean }) {
   return (
-    <a href={href} className={`inline-flex min-h-11 items-center rounded-xl px-4 text-sm font-medium ${LOOKS[kind]}`}>
+    <a href={href} {...(external ? { target: '_blank', rel: 'noreferrer' } : {})} className={`inline-flex min-h-11 items-center rounded-xl px-4 text-sm font-medium ${LOOKS[kind]}`}>
       {children}
     </a>
   )

@@ -1,11 +1,15 @@
 // One recipe, in the template order: sources, ingredients, method, my notes. Every text is shown
 // exactly as written, each in its own direction (dir="auto") so mixed Arabic/English lines read
 // correctly. The original page text is always one tap away.
+//
+// A recipe with a OneNote page is read from the page again each time it is opened (for owners and
+// editors), and its text is edited in OneNote; the app edits only its own fields (tags, planning).
 
 import { useCallback, useEffect, useState } from 'react'
 import { href } from '../router'
 import { Badge, Button, LinkButton, Notice } from '../ui'
 import { loadRecipe, setFavorite, setFlagStatus, type LoadedRecipe } from './api'
+import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeDoc } from './types'
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -22,6 +26,7 @@ const FLAG_LABELS: Record<string, string> = {
   method_inside_ingredients: 'الطريقة مكتوبة داخل المقادير',
   quantities_missing: 'كميات غير مذكورة',
   title_mismatch: 'العنوان لا يطابق المحتوى',
+  added_from_onenote: 'أُضيفت من صفحة في OneNote',
 }
 
 function describeFlag(flag: string): string {
@@ -32,12 +37,41 @@ function describeFlag(flag: string): string {
 
 export default function RecipePage({ id, canEdit, userId }: { id: string; canEdit: boolean; userId: string }) {
   const [loaded, setLoaded] = useState<LoadedRecipe | null | undefined>(undefined)
+  const [page, setPage] = useState<PageLink | null>(null)
+  const [reading, setReading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     loadRecipe(id).then(setLoaded, (e: Error) => setError(e.message))
+    loadRecipePage(id).then(setPage, () => setPage(null))
   }, [id])
   useEffect(load, [load])
+
+  // Read the page again on open (unless it was read a moment ago), then show the result.
+  useEffect(() => {
+    if (!canEdit) return
+    let live = true
+    loadRecipePage(id).then((link) => {
+      if (!link || !live) return
+      if (link.last_read_at && Date.now() - Date.parse(link.last_read_at) < 60_000) return
+      setReading(true)
+      refreshFromPage(id)
+        .then(
+          () => {
+            if (live) load()
+          },
+          () => {
+            if (live) loadRecipePage(id).then(setPage, () => undefined)
+          },
+        )
+        .finally(() => {
+          if (live) setReading(false)
+        })
+    }, () => undefined)
+    return () => {
+      live = false
+    }
+  }, [id, canEdit, load])
 
   if (error) return <Notice tone="error">{error}</Notice>
   if (loaded === undefined) return <p className="text-muted">جارٍ التحميل…</p>
@@ -68,9 +102,11 @@ export default function RecipePage({ id, canEdit, userId }: { id: string; canEdi
         </div>
         <div className="flex flex-wrap gap-2">
           <Button kind="plain" onClick={toggleFavorite}>{favorite ? '★ في المفضلة' : '☆ أضف للمفضلة'}</Button>
-          {canEdit && <LinkButton href={href.edit(id)}>تعديل</LinkButton>}
+          {canEdit && page?.web_url && <LinkButton external kind="primary" href={page.web_url}>تعديل في OneNote ↗</LinkButton>}
+          {canEdit && <LinkButton href={href.edit(id)}>{page ? 'الوسوم والتخطيط' : 'تعديل'}</LinkButton>}
         </div>
         <Facts doc={doc} />
+        {page && <PageStatus page={page} reading={reading} />}
       </header>
 
       {doc.status === 'link_only' && <LinkOnly doc={doc} />}
@@ -168,6 +204,18 @@ export default function RecipePage({ id, canEdit, userId }: { id: string; canEdi
         </details>
       )}
     </article>
+  )
+}
+
+function PageStatus({ page, reading }: { page: PageLink; reading: boolean }) {
+  if (page.read_status === 'missing') {
+    return <Notice>صفحة هذه الوصفة لم تعد في دفتر OneNote (حُذفت أو نُقلت). الوصفة باقية هنا كما قُرئت آخر مرة. إن نقلتِها، اربطيها من صفحة OneNote في التطبيق.</Notice>
+  }
+  return (
+    <p className="text-sm text-muted">
+      من OneNote{page.section_name ? ` · ${page.section_name}` : ''} · {reading ? 'جارٍ قراءة الصفحة…' : `قُرئت ${timeAgo(page.last_read_at)}`}
+      {page.read_status === 'error' && !reading && ' · تعذّرت آخر قراءة'}
+    </p>
   )
 }
 

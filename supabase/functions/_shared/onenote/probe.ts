@@ -8,10 +8,10 @@ const LINE = '2 كوب رز مع mixed leaves'
 const ITEM = 'صدر دجاج'
 const STEPS = ['نحمر البصل', 'نضيف الدجاج']
 
-const RLE = '‫'
-const PDF = '‬'
-const RLI = '⁧'
-const PDI = '⁩'
+const RLE = '\u202B'
+const PDF = '\u202C'
+const RLI = '\u2067'
+const PDI = '\u2069'
 const RIGHT = 'style="text-align:right"'
 
 const wrap = (open: string, close: string) => (text: string) => `${open}${text}${close}`

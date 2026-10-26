@@ -25,7 +25,11 @@ export class FakeOneNote implements PageGraph {
   private seq = 0
   private clock = 1000
 
-  constructor(private readonly sectionNotebook: Record<string, string>) {}
+  // sectionNotebook: section id → notebook id. names: notebook and section ids → display names.
+  constructor(
+    private readonly sectionNotebook: Record<string, string>,
+    private readonly names: Record<string, string> = {},
+  ) {}
 
   private take(call: string) {
     this.calls.push(call)
@@ -96,6 +100,38 @@ export class FakeOneNote implements PageGraph {
     const page = { notebookId: this.sectionNotebook[sectionId], sectionId, html: this.withIds(parseHTML(html).document), lastModified: ++this.clock }
     this.pages.set(id, page)
     return this.meta(id)
+  }
+
+  async findNotebook(displayName: string) {
+    this.take('findNotebook')
+    const id = [...new Set(Object.values(this.sectionNotebook))].find((nb) => (this.names[nb] ?? nb) === displayName)
+    return id ? { id, displayName } : null
+  }
+
+  async listNotebooks() {
+    this.take('listNotebooks')
+    return [...new Set(Object.values(this.sectionNotebook))].map((id) => ({ id, displayName: this.names[id] ?? id }))
+  }
+
+  async listSections(notebookId: string) {
+    this.take('listSections')
+    return Object.entries(this.sectionNotebook)
+      .filter(([, nb]) => nb === notebookId)
+      .map(([id]) => ({ id, displayName: this.names[id] ?? id }))
+  }
+
+  async listSectionPages(sectionId: string) {
+    this.take('listSectionPages')
+    return [...this.pages].filter(([, page]) => page.sectionId === sectionId).map(([id]) => this.meta(id))
+  }
+
+  // Someone moves a page to another section in a OneNote app (its id changes, as OneNote's does).
+  movePage(pageId: string, sectionId: string): string {
+    const page = this.pages.get(pageId)!
+    this.pages.delete(pageId)
+    const id = `page-${++this.seq}`
+    this.pages.set(id, { ...page, sectionId, notebookId: this.sectionNotebook[sectionId] })
+    return id
   }
 
   async getPageMeta(pageId: string) {

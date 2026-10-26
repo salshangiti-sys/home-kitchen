@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { GraphError, NotAllowedError, OneNoteClient, assertWritable, backoffMs } from './graph.ts'
+import { GraphError, NotAllowedError, OneNoteClient, assertWritable, backoffMs, readCreateOnly } from './graph.ts'
 
 function client(
   responses: Array<Response | Error>,
@@ -107,5 +107,21 @@ describe('assertWritable', () => {
     expect(() => assertWritable('nb-test', ['nb-test'])).not.toThrow()
     expect(() => assertWritable('nb-real-recipes', ['nb-test'])).toThrow(NotAllowedError)
     expect(() => assertWritable(null, ['nb-test'])).toThrow(NotAllowedError)
+  })
+
+  it('lists a section\'s pages across OneNote\'s pages of results', async () => {
+    const page = (id: string) => ({ id, title: id, lastModifiedDateTime: 't', parentNotebook: { id: 'nb' }, parentSection: { id: 's1' } })
+    const { graph, fetchMock } = client([
+      new Response(JSON.stringify({ value: [page('a'), page('b')], '@odata.nextLink': 'https://graph.microsoft.com/v1.0/me/onenote/sections/s1/pages?$skip=2' }), { status: 200 }),
+      new Response(JSON.stringify({ value: [page('c')] }), { status: 200 }),
+    ])
+    const pages = await graph.listSectionPages('s1')
+    expect(pages.map((p) => p.id)).toEqual(['a', 'b', 'c'])
+    expect((fetchMock.mock.calls[1] as unknown as [string])[0]).toBe('https://graph.microsoft.com/v1.0/me/onenote/sections/s1/pages?$skip=2')
+  })
+
+  it('offers no way to change a page through the read/create client', () => {
+    const { graph } = client([])
+    expect(Object.keys(readCreateOnly(graph)).sort()).toEqual(['createPage', 'findNotebook', 'getPageContent', 'getPageMeta', 'listNotebooks', 'listSectionPages', 'listSections'])
   })
 })

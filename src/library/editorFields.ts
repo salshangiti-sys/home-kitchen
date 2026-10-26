@@ -5,7 +5,9 @@
 // worked out from the text: a line whose text did not change keeps the values it had, and a new
 // or changed line has none.
 
-import { MEAL_TYPES, type IngredientGroup, type IngredientItem, type MealType, type Platform, type RecipeDoc, type RecipeStatus } from './types'
+import { MEAL_TYPES, platformOf, type IngredientGroup, type IngredientItem, type MealType, type RecipeDoc, type RecipeStatus } from './types'
+
+export { platformOf }
 
 export type TriState = 'unknown' | 'yes' | 'no'
 
@@ -80,20 +82,6 @@ export function docToFields(doc: RecipeDoc): EditorFields {
     lunchbox: toTri(doc.tags?.lunchbox),
     customTags: (doc.tags?.custom ?? []).join('، '),
   }
-}
-
-export function platformOf(url: string): Platform {
-  let host = ''
-  try {
-    host = new URL(url).hostname.toLowerCase()
-  } catch {
-    return 'other'
-  }
-  if (host.includes('tiktok')) return 'tiktok'
-  if (host.includes('youtube') || host === 'youtu.be') return 'youtube'
-  if (host.includes('instagram')) return 'instagram'
-  if (host.includes('snapchat')) return 'snapchat'
-  return 'web'
 }
 
 function parseSources(text: string, before: RecipeDoc['sources']): RecipeDoc['sources'] {
@@ -206,5 +194,18 @@ export function fieldsToDoc(fields: EditorFields, before: RecipeDoc | null): Rec
     // An imported recipe keeps the page text it came with (the source of truth for what the
     // OneNote page said); a recipe written in the app gets its text from its own fields.
     raw_text: before && isFromOneNote(before) ? before.raw_text : composeRawText({ title, sources, ingredient_groups, steps, notes }),
+  }
+}
+
+// For a recipe whose text lives in a OneNote page: only the app's own fields (tags, servings,
+// times) come from the form; everything read from the page stays exactly as it is.
+export function planningToDoc(fields: EditorFields, before: RecipeDoc): RecipeDoc {
+  const edited = fieldsToDoc(fields, before)
+  return {
+    ...before,
+    tags: edited.tags,
+    servings: edited.servings,
+    prep_time_min: edited.prep_time_min,
+    cook_time_min: edited.cook_time_min,
   }
 }

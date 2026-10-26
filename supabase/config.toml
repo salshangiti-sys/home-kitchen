@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.onenote-sync]
 verify_jwt = false
+
+[functions.onenote-library]
+verify_jwt = false
