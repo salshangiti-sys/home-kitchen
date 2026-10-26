@@ -1,6 +1,7 @@
-// The recipe notebook (وصفاتي), read-only plus new pages, for the signed-in owner or editor:
-//   notebooks      the names of the account's notebooks, to choose the recipe notebook from
-//   connect        link the household to a notebook by name (reads its sections)
+// The recipe library in OneNote (a notebook or section group; the owner's is «الطبخ»), read-only
+// plus new pages, for the signed-in owner or editor:
+//   places         the account's notebooks and section groups, to choose the library from
+//   connect        link the household to one of them (reads its sections)
 //   refresh        read one recipe's page into the app
 //   check          list the notebook's pages: new ones for review, gone ones, refresh a few
 //   add-page       make a recipe from a page in the review list
@@ -18,6 +19,7 @@ import { ReconnectRequiredError } from '../_shared/onenote/errors.ts'
 import { GraphError, OneNoteClient, readCreateOnly } from '../_shared/onenote/graph.ts'
 import {
   LibraryError,
+  libraryLabel,
   addPage,
   checkLibrary,
   connectLibrary,
@@ -31,7 +33,7 @@ import type { RecipeDoc } from '../_shared/onenote/recipeDoc.ts'
 
 interface Body {
   action?: string
-  notebookName?: string
+  placeId?: string
   recipeId?: string
   pageId?: string
   doc?: RecipeDoc
@@ -64,7 +66,7 @@ Deno.serve(async (req) => {
 
     // The notebook is read with the Microsoft account of whoever linked it.
     const { data: linked } = await admin.from('onenote_library').select('user_id').eq('household_id', member.household_id).maybeSingle()
-    const tokenUser = body.action === 'connect' || body.action === 'notebooks' || !linked ? user.id : linked.user_id
+    const tokenUser = body.action === 'connect' || body.action === 'places' || !linked ? user.id : linked.user_id
     const client = new OneNoteClient({ getAccessToken: accessTokenProvider(admin, tokenUser, oauthConfig()) })
     const deps: LibraryDeps = {
       graph: readCreateOnly(client),
@@ -74,10 +76,19 @@ Deno.serve(async (req) => {
     }
 
     switch (body.action) {
-      case 'notebooks':
-        return json(req, (await deps.graph.listNotebooks()).map((notebook) => notebook.displayName))
-      case 'connect':
-        return json(req, await connectLibrary(deps, required(body.notebookName, 'notebookName')))
+      case 'places':
+        return json(
+          req,
+          (await deps.graph.listPlaces()).map((place) => ({
+            id: place.id,
+            kind: place.kind,
+            label: libraryLabel({ notebookName: place.notebookName, sectionGroup: place.groupPath.join(' › ') || null }),
+          })),
+        )
+      case 'connect': {
+        const library = await connectLibrary(deps, required(body.placeId, 'placeId'))
+        return json(req, { label: libraryLabel(library), sections: library.sections.length })
+      }
       case 'refresh':
         return json(req, await refreshRecipe(deps, required(body.recipeId, 'recipeId')))
       case 'check':

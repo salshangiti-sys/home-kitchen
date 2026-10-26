@@ -6,6 +6,7 @@ import type { RecipeDoc } from './types'
 
 export interface LibraryInfo {
   notebook_name: string
+  section_group: string | null
   sections: Array<{ id: string; name: string }>
   last_checked_at: string | null
   last_error: string | null
@@ -49,14 +50,25 @@ export interface RefreshOutcome {
   error: string | null
 }
 
-// The notebook's name for recipes (decided 2026-10-26).
-export const RECIPE_NOTEBOOK = 'وصفاتي'
+// Where the recipes are: the section group «الطبخ» in the notebook «البيت والطبخ» (decided
+// 2026-10-26). Offered first when choosing.
+export const RECIPE_PLACE = 'الطبخ'
+
+export interface Place {
+  id: string
+  kind: 'notebook' | 'sectionGroup'
+  label: string
+}
+
+// How the library is named, e.g. «البيت والطبخ › الطبخ».
+export const libraryLabel = (library: Pick<LibraryInfo, 'notebook_name' | 'section_group'>) =>
+  library.section_group ? `${library.notebook_name} › ${library.section_group}` : library.notebook_name
 // How often the app looks for new and changed pages on its own.
 export const CHECK_EVERY_MS = 3 * 60 * 60 * 1000
 
 // What the OneNote function's error codes mean, for the owner.
 const ERRORS: Record<string, string> = {
-  notebook_not_found: 'لا يوجد دفتر بهذا الاسم في حساب OneNote. اختاري اسمه من القائمة.',
+  notebook_not_found: 'لم يُعثر على هذا الدفتر أو مجموعة الأقسام في OneNote. افتحي القائمة من جديد.',
   not_linked: 'دفتر الوصفات غير مربوط بعد.',
   wrong_notebook: 'هذه الصفحة ليست في دفتر الوصفات.',
   unknown_section: 'هذا القسم غير موجود في دفتر الوصفات. افحصي الدفتر ثم حاولي مرة أخرى.',
@@ -75,10 +87,10 @@ async function call<T>(action: string, body: Record<string, unknown> = {}): Prom
   }
 }
 
-export const listNotebooks = () => call<string[]>('notebooks')
+export const listPlaces = () => call<Place[]>('places')
 
 export async function loadLibrary(): Promise<LibraryInfo | null> {
-  const { data, error } = await supabase.from('onenote_library').select('notebook_name,sections,last_checked_at,last_error').maybeSingle()
+  const { data, error } = await supabase.from('onenote_library').select('notebook_name,section_group,sections,last_checked_at,last_error').maybeSingle()
   if (error) throw new Error(error.message)
   return data as LibraryInfo | null
 }
@@ -123,7 +135,7 @@ export async function connectMicrosoft(returnTo: string) {
   window.location.assign(url)
 }
 
-export const connectNotebook = (notebookName: string) => call<{ notebookName: string }>('connect', { notebookName })
+export const connectPlace = (placeId: string) => call<{ label: string; sections: number }>('connect', { placeId })
 export const checkNotebook = () => call<CheckSummary>('check')
 export const refreshFromPage = (recipeId: string) => call<RefreshOutcome>('refresh', { recipeId })
 export const addPageAsRecipe = (pageId: string) => call<{ recipeId: string }>('add-page', { pageId })

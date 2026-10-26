@@ -13,7 +13,7 @@ import { href, navigate } from '../router'
 import { Button, LinkButton, Notice } from '../ui'
 import { listRecipes, loadRecipe, saveRecipe } from './api'
 import { docToFields, emptyFields, fieldsToDoc, GROUP_PREFIX, isFromOneNote, planningToDoc, type EditorFields, type TriState } from './editorFields'
-import { createPage, loadLibrary, loadRecipePage, type LibraryInfo, type RecipePage } from './onenote'
+import { createPage, libraryLabel, loadLibrary, loadRecipePage, type LibraryInfo, type RecipePage } from './onenote'
 import { MEAL_TYPE_LABELS, MEAL_TYPES, STATUS_LABELS, type RecipeDoc, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
 
@@ -108,7 +108,7 @@ export default function RecipeEditor({ id }: { id: string | null }) {
       {newPage && (
         <fieldset className="flex flex-col gap-2 rounded-2xl border border-line p-4">
           <legend className="px-1 font-semibold">أين تكتبين الوصفة؟</legend>
-          <Choice checked={blank} onChange={() => setBlank(true)} title="أنشئ صفحة فارغة في OneNote" hint={`صفحة جديدة في «${library!.notebook_name}» بالعنوان والقالب (المصدر، المقادير، الطريقة، ملاحظاتي)، تكملينها في OneNote.`} />
+          <Choice checked={blank} onChange={() => setBlank(true)} title="أنشئ صفحة فارغة في OneNote" hint={`صفحة جديدة في «${libraryLabel(library!)}» بالعنوان والقالب (المصدر، المقادير، الطريقة، ملاحظاتي)، تكملينها في OneNote.`} />
           <Choice checked={!blank} onChange={() => setBlank(false)} title="اكتبيها هنا" hint="تكتبين الوصفة في النموذج، ويُنشئ التطبيق صفحتها في OneNote مرة واحدة. بعدها تُعدّل في OneNote." />
         </fieldset>
       )}

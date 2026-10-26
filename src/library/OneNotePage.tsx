@@ -10,18 +10,20 @@ import {
   addPageAsRecipe,
   checkNotebook,
   connectMicrosoft,
-  connectNotebook,
+  connectPlace,
   linkImportedRecipes,
   linkPageToRecipe,
   listMissing,
-  listNotebooks,
+  libraryLabel,
+  listPlaces,
   listUnlinked,
   loadLibrary,
   msConnection,
-  RECIPE_NOTEBOOK,
+  RECIPE_PLACE,
   timeAgo,
   type LibraryInfo,
   type MissingPage,
+  type Place,
   type UnlinkedPage,
 } from './onenote'
 
@@ -44,9 +46,9 @@ export default function OneNotePage() {
   const [state, setState] = useState<State | null>(null)
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
-  const [name, setName] = useState(RECIPE_NOTEBOOK)
+  const [placeId, setPlaceId] = useState<string | null>(null)
   const [changing, setChanging] = useState(false)
-  const [notebooks, setNotebooks] = useState<string[] | null>(null)
+  const [places, setPlaces] = useState<Place[] | null>(null)
 
   const load = useCallback(async () => {
     const [connection, library, unlinked, missing, { recipes }] = await Promise.all([msConnection(), loadLibrary(), listUnlinked(), listMissing(), listRecipes()])
@@ -63,13 +65,21 @@ export default function OneNotePage() {
     load().catch((e: Error) => setNotice({ text: e.message, error: true }))
   }, [load])
 
-  // When choosing the notebook, offer the names of the account's notebooks.
+  // When choosing, list the account's notebooks and section groups, «الطبخ» first.
   const choosing = state?.connection?.status === 'connected' && (!state.library || changing)
   useEffect(() => {
-    if (!choosing || notebooks !== null) return
-    setNotebooks([])
-    listNotebooks().then(setNotebooks, () => setNotebooks([]))
-  }, [choosing, notebooks])
+    if (!choosing || places !== null) return
+    setPlaces([])
+    listPlaces().then(
+      (list) => {
+        const preferred = (place: Place) => (place.label.split(' › ').at(-1) === RECIPE_PLACE ? 0 : 1)
+        const sorted = [...list].sort((a, b) => preferred(a) - preferred(b) || a.label.localeCompare(b.label, 'ar'))
+        setPlaces(sorted)
+        setPlaceId((current) => current ?? (sorted[0] && preferred(sorted[0]) === 0 ? sorted[0].id : null))
+      },
+      (e: Error) => setNotice({ text: e.message, error: true }),
+    )
+  }, [choosing, places])
 
   const act = async (work: () => Promise<string | void>) => {
     setBusy(true)
@@ -91,10 +101,10 @@ export default function OneNotePage() {
 
   const link = () =>
     act(async () => {
-      const linked = await connectNotebook(name.trim())
+      const linked = await connectPlace(placeId!)
       setChanging(false)
       const summary = await checkNotebook()
-      return `رُبط الدفتر «${linked.notebookName}». وُجدت ${summary.pages} صفحة، منها ${summary.unlinked} ليست في التطبيق بعد.`
+      return `رُبط «${linked.label}» (${linked.sections} قسم). وُجدت ${summary.pages} صفحة، منها ${summary.unlinked} ليست في التطبيق بعد.`
     })
 
   return (
@@ -120,15 +130,15 @@ export default function OneNotePage() {
 
       {connected && (
         <Card
-          title="دفتر الوصفات"
-          actions={library && !changing ? <Button kind="plain" disabled={busy} onClick={() => setChanging(true)}>دفتر آخر</Button> : undefined}
+          title="مكان الوصفات"
+          actions={library && !changing ? <Button kind="plain" disabled={busy} onClick={() => setChanging(true)}>مكان آخر</Button> : undefined}
         >
           {library && !changing ? (
             <div className="flex flex-col gap-3">
               <p>
-                الدفتر: <strong dir="auto">{library.notebook_name}</strong> · {library.sections.length} قسم
+                مكان الوصفات: <strong dir="auto">{libraryLabel(library)}</strong> · {library.sections.length} قسم
               </p>
-              <p className="text-sm text-muted">آخر فحص: {timeAgo(library.last_checked_at)}. يفحص التطبيق الدفتر وحده كل بضع ساعات، ويقرأ الوصفة من جديد كلما فتحتِها.</p>
+              <p className="text-sm text-muted">آخر فحص: {timeAgo(library.last_checked_at)}. يفحص التطبيق مكان الوصفات وحده كل بضع ساعات، ويقرأ الوصفة من جديد كلما فتحتِها.</p>
               {library.last_error && <Notice tone="error">آخر فحص لم يكتمل: {library.last_error}</Notice>}
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -164,26 +174,25 @@ export default function OneNotePage() {
                 link()
               }}
             >
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium">اسم الدفتر في OneNote</span>
-                <input dir="auto" required list="hk-notebooks" value={name} onChange={(e) => setName(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3" />
-                <datalist id="hk-notebooks">
-                  {notebooks?.map((n) => <option key={n} value={n} />)}
-                </datalist>
-                <span className="text-xs text-muted">للتجربة أولًا اكتبي «وصفات - تجربة». الربط يقرأ فقط: لا يُضاف شيء للتطبيق ولا يتغير شيء في OneNote.</span>
-              </label>
-              {notebooks && notebooks.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  <span className="text-sm text-muted">دفاترك:</span>
-                  {notebooks.map((n) => (
-                    <button key={n} type="button" dir="auto" onClick={() => setName(n)} className={`rounded-full border px-3 py-1 text-sm ${n === name ? 'border-accent text-accent' : 'border-line'}`}>
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <fieldset className="flex flex-col gap-2">
+                <legend className="mb-1 text-sm font-medium">أين وصفاتك في OneNote؟</legend>
+                {!places?.length ? (
+                  <p className="text-sm text-muted">جارٍ جلب الدفاتر…</p>
+                ) : (
+                  <div className="flex max-h-72 flex-col gap-1 overflow-y-auto">
+                    {places.map((place) => (
+                      <label key={place.id} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3 ${place.id === placeId ? 'border-accent' : 'border-line'}`}>
+                        <input type="radio" name="hk-place" className="accent-[var(--accent)]" checked={place.id === placeId} onChange={() => setPlaceId(place.id)} />
+                        <span dir="auto">{place.label}</span>
+                        <span className="ms-auto text-xs text-muted">{place.kind === 'notebook' ? 'دفتر' : 'مجموعة أقسام'}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <span className="text-xs text-muted">الربط يقرأ فقط: لا يُضاف شيء للتطبيق ولا يتغير شيء في OneNote. للتجربة اختاري «وصفات - تجربة».</span>
+              </fieldset>
               <div className="flex gap-2">
-                <Button type="submit" disabled={busy || !name.trim()}>{busy ? 'جارٍ الربط…' : 'اربطي الدفتر'}</Button>
+                <Button type="submit" disabled={busy || !placeId}>{busy ? 'جارٍ الربط…' : 'اربطي'}</Button>
                 {library && <Button kind="plain" onClick={() => setChanging(false)}>إلغاء</Button>}
               </div>
             </form>

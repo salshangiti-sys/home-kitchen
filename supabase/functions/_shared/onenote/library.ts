@@ -1,4 +1,4 @@
-// The recipe notebook (وصفاتي) is read, never edited: recipe text is written in OneNote, and the app
+// The recipe library (the section group «الطبخ») is read, never edited: recipe text is written in OneNote, and the app
 // takes it from the page. The app adds its own fields (tags, meal types, favorites, planning),
 // which never go to OneNote. New pages can be created from the app, once, with the template.
 //
@@ -108,13 +108,16 @@ export function statusOf(doc: Pick<RecipeDoc, 'ingredient_groups' | 'steps' | 's
 
 // A recipe for a page found in OneNote that the app does not know yet. The new id comes from the
 // server; the flag puts it on the review list.
-export function recipeFromPage(page: { id: string; title: string; html: string; created?: string | null }, place: { notebook: string; section: string }): RecipeDoc {
+export function recipeFromPage(
+  page: { id: string; title: string; html: string; created?: string | null },
+  place: { notebook: string; sectionGroup?: string | null; section: string },
+): RecipeDoc {
   const empty: RecipeDoc = {
     id: '',
     title: page.title,
     language: 'ar',
     status: 'note_only',
-    category: { notebook: place.notebook, section: place.section },
+    category: { notebook: place.notebook, ...(place.sectionGroup ? { section_group: place.sectionGroup } : {}), section: place.section },
     sources: [],
     ingredient_groups: [],
     steps: [],

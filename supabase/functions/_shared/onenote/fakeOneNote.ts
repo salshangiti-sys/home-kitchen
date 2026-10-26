@@ -1,7 +1,7 @@
 // A simulated OneNote for tests (not part of the Edge Function bundle).
 
 import { parseHTML } from 'linkedom'
-import { GraphError, type PageMeta, type PatchCommand } from './graph.ts'
+import { GraphError, type PageMeta, type PatchCommand, type Place } from './graph.ts'
 import type { PageGraph } from './engine.ts'
 
 interface FakePage {
@@ -25,10 +25,12 @@ export class FakeOneNote implements PageGraph {
   private seq = 0
   private clock = 1000
 
-  // sectionNotebook: section id → notebook id. names: notebook and section ids → display names.
+  // sectionNotebook: section id → notebook id. names: notebook, group and section ids → display
+  // names. sectionGroup: section id → the (single-level) section group it is in, if any.
   constructor(
     private readonly sectionNotebook: Record<string, string>,
     private readonly names: Record<string, string> = {},
+    private readonly sectionGroup: Record<string, string> = {},
   ) {}
 
   private take(call: string) {
@@ -108,9 +110,25 @@ export class FakeOneNote implements PageGraph {
     return id ? { id, displayName } : null
   }
 
-  async listNotebooks() {
-    this.take('listNotebooks')
-    return [...new Set(Object.values(this.sectionNotebook))].map((id) => ({ id, displayName: this.names[id] ?? id }))
+  async listPlaces(): Promise<Place[]> {
+    this.take('listPlaces')
+    const name = (id: string) => this.names[id] ?? id
+    const notebooks = [...new Set(Object.values(this.sectionNotebook))]
+    const groups = [...new Set(Object.values(this.sectionGroup))]
+    return [
+      ...notebooks.map((id) => ({ kind: 'notebook' as const, id, notebookId: id, notebookName: name(id), groupPath: [] })),
+      ...groups.map((id) => {
+        const notebookId = this.sectionNotebook[Object.keys(this.sectionGroup).find((s) => this.sectionGroup[s] === id)!]
+        return { kind: 'sectionGroup' as const, id, notebookId, notebookName: name(notebookId), groupPath: [name(id)] }
+      }),
+    ]
+  }
+
+  async listPlaceSections(kind: Place['kind'], id: string) {
+    this.take('listPlaceSections')
+    return Object.keys(this.sectionNotebook)
+      .filter((s) => (kind === 'notebook' ? this.sectionNotebook[s] === id : this.sectionGroup[s] === id))
+      .map((s) => ({ id: s, displayName: kind === 'notebook' && this.sectionGroup[s] ? `${this.names[this.sectionGroup[s]]} › ${this.names[s] ?? s}` : (this.names[s] ?? s) }))
   }
 
   async listSections(notebookId: string) {

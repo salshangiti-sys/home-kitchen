@@ -1,6 +1,9 @@
-// Working with the recipe notebook (وصفاتي): read-only, plus creating new pages.
+// Working with the recipe library in OneNote: read-only, plus creating new pages. The library is a
+// notebook or a section group in one; the owner's is the section group «الطبخ» in «البيت والطبخ»
+// (decided 2026-10-26). A page belongs to it when it is in one of its sections, including the
+// sections of section groups inside it.
 //
-// - connect: find the notebook by name and remember it and its sections.
+// - connect: choose the notebook or section group and remember it and its sections.
 // - refresh: read one recipe's page and take its text into the app (app-only fields stay).
 // - check: list the notebook's pages; mark pages that are gone, list pages no recipe is linked to
 //   yet (for the owner to add or link), and refresh the recipes read longest ago.
@@ -11,7 +14,7 @@
 //
 // Every function takes a ReadCreateGraph, which has no way to change or delete a page.
 
-import { GraphError, type PageMeta, type ReadCreateGraph } from './graph.ts'
+import { GraphError, type PageMeta, type Place, type ReadCreateGraph } from './graph.ts'
 import { readPage, recipeFromPage, sectionsOf } from './library.ts'
 import type { RecipeDoc } from './recipeDoc.ts'
 import { buildPageHtml } from './template.ts'
@@ -22,11 +25,19 @@ export interface LibrarySection {
 }
 
 export interface Library {
+  kind: Place['kind']
+  placeId: string
   notebookId: string
   notebookName: string
+  // The section group's path in the notebook («الطبخ», or «الطبخ › حلويات»); null for a notebook.
+  sectionGroup: string | null
   sections: LibrarySection[]
   lastCheckedAt: string | null
 }
+
+// How the library is named to the owner, e.g. «البيت والطبخ › الطبخ».
+export const libraryLabel = (library: Pick<Library, 'notebookName' | 'sectionGroup'>) =>
+  library.sectionGroup ? `${library.notebookName} › ${library.sectionGroup}` : library.notebookName
 
 export type ReadStatus = 'ok' | 'missing' | 'error'
 
@@ -96,6 +107,23 @@ async function requireLibrary(store: LibraryStore): Promise<Library> {
 
 const sectionName = (library: Library, sectionId: string | null) => library.sections.find((s) => s.id === sectionId)?.name ?? null
 
+async function placeSections(graph: ReadCreateGraph, library: Pick<Library, 'kind' | 'placeId'>): Promise<LibrarySection[]> {
+  return (await graph.listPlaceSections(library.kind, library.placeId)).map((s) => ({ id: s.id, name: s.displayName }))
+}
+
+const holds = (library: Library, meta: PageMeta) => meta.notebookId === library.notebookId && library.sections.some((s) => s.id === meta.sectionId)
+
+// The library, if the page is in it. A section added to the library since the last check is found
+// by listing the sections again (and remembered).
+async function libraryHolding(deps: LibraryDeps, library: Library, meta: PageMeta): Promise<Library | null> {
+  if (holds(library, meta)) return library
+  if (meta.notebookId !== library.notebookId) return null
+  const fresh = { ...library, sections: await placeSections(deps.graph, library) }
+  if (!holds(fresh, meta)) return null
+  await deps.store.saveLibrary(fresh)
+  return fresh
+}
+
 function linkFrom(recipeId: string, meta: PageMeta, library: Library, extra: Partial<PageLink> = {}): PageLink {
   return {
     recipeId,
@@ -114,14 +142,16 @@ function linkFrom(recipeId: string, meta: PageMeta, library: Library, extra: Par
   }
 }
 
-export async function connectLibrary(deps: LibraryDeps, notebookName: string): Promise<Library> {
-  const notebook = await deps.graph.findNotebook(notebookName)
-  if (!notebook) throw new LibraryError(`no OneNote notebook named «${notebookName}»`, 'notebook_not_found')
-  const sections = await deps.graph.listSections(notebook.id)
+export async function connectLibrary(deps: LibraryDeps, placeId: string): Promise<Library> {
+  const place = (await deps.graph.listPlaces()).find((p) => p.id === placeId)
+  if (!place) throw new LibraryError('no such OneNote notebook or section group', 'notebook_not_found')
+  const where = { kind: place.kind, placeId: place.id }
   const library: Library = {
-    notebookId: notebook.id,
-    notebookName: notebook.displayName,
-    sections: sections.map((s) => ({ id: s.id, name: s.displayName })),
+    ...where,
+    notebookId: place.notebookId,
+    notebookName: place.notebookName,
+    sectionGroup: place.groupPath.length ? place.groupPath.join(' › ') : null,
+    sections: await placeSections(deps.graph, where),
     lastCheckedAt: null,
   }
   await deps.store.saveLibrary(library)
@@ -139,15 +169,14 @@ export async function refreshRecipe(deps: LibraryDeps, recipeId: string): Promis
   if (!link) throw new LibraryError('this recipe has no OneNote page', 'not_found')
   try {
     const meta = await graph.getPageMeta(link.pageId)
-    if (meta.notebookId !== library.notebookId) {
-      throw new LibraryError('the page is no longer in the recipe notebook', 'wrong_notebook')
-    }
+    const holding = await libraryHolding(deps, library, meta)
+    if (!holding) throw new LibraryError('the page is no longer in the recipe library', 'wrong_notebook')
     const html = await graph.getPageContent(link.pageId)
     const current = await store.recipe(recipeId)
     if (!current) throw new LibraryError('recipe not found', 'not_found')
     const { doc } = readPage(current.doc, { title: meta.title, html })
     const saved = await store.saveRecipe(doc, current.version, 'onenote')
-    await store.saveLink(linkFrom(recipeId, meta, library, { createdByApp: link.createdByApp, lastReadAt: now().toISOString() }))
+    await store.saveLink(linkFrom(recipeId, meta, holding, { createdByApp: link.createdByApp, lastReadAt: now().toISOString() }))
     return { status: 'ok', result: saved.result, error: null }
   } catch (error) {
     const missing = is404(error) || (error instanceof LibraryError && error.code === 'wrong_notebook')
@@ -174,8 +203,8 @@ export interface CheckSummary {
 export async function checkLibrary(deps: LibraryDeps, refreshLimit = 10): Promise<CheckSummary> {
   const { graph, store, now } = deps
   const library = await requireLibrary(store)
-  const sections = await graph.listSections(library.notebookId)
-  const fresh: Library = { ...library, sections: sections.map((s) => ({ id: s.id, name: s.displayName })) }
+  const fresh: Library = { ...library, sections: await placeSections(graph, library) }
+  await store.saveLibrary(fresh)
 
   const pages: PageMeta[] = []
   for (const section of fresh.sections) pages.push(...(await graph.listSectionPages(section.id)))
@@ -188,7 +217,7 @@ export async function checkLibrary(deps: LibraryDeps, refreshLimit = 10): Promis
     if (listed.has(link.pageId)) continue
     try {
       const meta = await graph.getPageMeta(link.pageId)
-      if (meta.notebookId === fresh.notebookId) continue
+      if (holds(fresh, meta)) continue
     } catch (error) {
       if (!is404(error)) throw error
     }
@@ -215,19 +244,20 @@ export async function checkLibrary(deps: LibraryDeps, refreshLimit = 10): Promis
   return { pages: pages.length, unlinked: unlinked.length, missing, refreshed: stale.length, changed }
 }
 
-async function pageInLibrary(deps: LibraryDeps, library: Library, pageId: string): Promise<PageMeta> {
+async function pageInLibrary(deps: LibraryDeps, library: Library, pageId: string): Promise<{ meta: PageMeta; library: Library }> {
   const meta = await deps.graph.getPageMeta(pageId)
-  if (meta.notebookId !== library.notebookId) throw new LibraryError('the page is not in the recipe notebook', 'wrong_notebook')
-  return meta
+  const holding = await libraryHolding(deps, library, meta)
+  if (!holding) throw new LibraryError('the page is not in the recipe library', 'wrong_notebook')
+  return { meta, library: holding }
 }
 
 // Makes a new recipe from a page that no recipe is linked to (the owner chose to add it).
 export async function addPage(deps: LibraryDeps, pageId: string): Promise<string> {
   const { graph, store, now } = deps
-  const library = await requireLibrary(store)
-  const meta = await pageInLibrary(deps, library, pageId)
+  const { meta, library } = await pageInLibrary(deps, await requireLibrary(store), pageId)
   const html = await graph.getPageContent(pageId)
-  const doc = recipeFromPage({ id: meta.id, title: meta.title, html }, { notebook: library.notebookName, section: sectionName(library, meta.sectionId) ?? 'بدون قسم' })
+  const place = { notebook: library.notebookName, sectionGroup: library.sectionGroup, section: sectionName(library, meta.sectionId) ?? 'بدون قسم' }
+  const doc = recipeFromPage({ id: meta.id, title: meta.title, html }, place)
   const saved = await store.saveRecipe(doc, null, 'onenote')
   await store.saveLink(linkFrom(saved.id, meta, library, { lastReadAt: now().toISOString() }))
   await store.removeUnlinked(pageId)
@@ -238,9 +268,8 @@ export async function addPage(deps: LibraryDeps, pageId: string): Promise<string
 // reads it.
 export async function linkPage(deps: LibraryDeps, pageId: string, recipeId: string): Promise<RefreshOutcome> {
   const { store } = deps
-  const library = await requireLibrary(store)
   if (!(await store.recipe(recipeId))) throw new LibraryError('recipe not found', 'not_found')
-  const meta = await pageInLibrary(deps, library, pageId)
+  const { meta, library } = await pageInLibrary(deps, await requireLibrary(store), pageId)
   const previous = await store.link(recipeId)
   await store.saveLink(linkFrom(recipeId, meta, library, { createdByApp: previous?.createdByApp ?? false }))
   await store.removeUnlinked(pageId)
@@ -251,14 +280,16 @@ export async function linkPage(deps: LibraryDeps, pageId: string, recipeId: stri
 // Pages that are gone or outside the notebook are linked as missing, so they show up for review.
 export async function linkImported(deps: LibraryDeps, limit = 25): Promise<{ linked: number; missing: number; remaining: boolean }> {
   const { graph, store } = deps
-  const library = await requireLibrary(store)
+  let library = await requireLibrary(store)
   const pending = await store.importedWithoutLink(limit + 1)
   let linked = 0
   let missing = 0
   for (const { recipeId, pageId } of pending.slice(0, limit)) {
     try {
       const meta = await graph.getPageMeta(pageId)
-      if (meta.notebookId !== library.notebookId) throw new LibraryError('outside the recipe notebook', 'wrong_notebook')
+      const holding = await libraryHolding(deps, library, meta)
+      if (!holding) throw new LibraryError('outside the recipe library', 'wrong_notebook')
+      library = holding
       await store.saveLink(linkFrom(recipeId, meta, library))
       await store.removeUnlinked(pageId)
       linked += 1
@@ -290,11 +321,11 @@ export async function createRecipePage(deps: LibraryDeps, input: { doc: RecipeDo
   const { graph, store, now } = deps
   const library = await requireLibrary(store)
   const section = library.sections.find((s) => s.name === input.sectionName)
-  if (!section) throw new LibraryError(`no section «${input.sectionName}» in «${library.notebookName}»`, 'unknown_section')
+  if (!section) throw new LibraryError(`no section «${input.sectionName}» in «${libraryLabel(library)}»`, 'unknown_section')
 
   const doc: RecipeDoc = {
     ...input.doc,
-    category: { ...input.doc.category, notebook: library.notebookName, section: section.name },
+    category: { ...input.doc.category, notebook: library.notebookName, section_group: library.sectionGroup, section: section.name },
   }
   const saved = await store.saveRecipe(doc, null, 'app')
   const html = buildPageHtml({ recipeId: saved.id, title: doc.title, sections: sectionsOf(doc), appUrl: deps.appUrl(saved.id), blankLines: input.blank })

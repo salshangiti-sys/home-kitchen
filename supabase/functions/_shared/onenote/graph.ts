@@ -71,6 +71,23 @@ function toMeta(raw: RawPage): PageMeta {
   }
 }
 
+// A notebook, or a section group inside one, that can hold the recipe pages.
+export interface Place {
+  kind: 'notebook' | 'sectionGroup'
+  id: string
+  notebookId: string
+  notebookName: string
+  // Section group names from the notebook down to this group; empty for a notebook.
+  groupPath: string[]
+}
+
+interface RawGroup {
+  id: string
+  displayName: string
+  parentNotebook?: { id: string; displayName: string } | null
+  parentSectionGroup?: { id: string } | null
+}
+
 export interface PatchCommand {
   target: string
   action: 'replace' | 'append' | 'insert' | 'prepend'
@@ -158,19 +175,63 @@ export class OneNoteClient {
     })
   }
 
-  // Every page in a section (title, last change, links), following OneNote's paging.
-  async listSectionPages(sectionId: string): Promise<PageMeta[]> {
-    const pages: PageMeta[] = []
-    let path: string | null =
-      `/sections/${encodeURIComponent(sectionId)}/pages?$select=id,title,lastModifiedDateTime,links&$expand=parentNotebook,parentSection&$top=100`
+  // Every item of a list, following OneNote's paging.
+  private async listAll<T>(first: string): Promise<T[]> {
+    const items: T[] = []
+    let path: string | null = first
     while (path) {
       const response = await this.request('GET', path)
-      const body = (await response.json()) as { value: RawPage[]; '@odata.nextLink'?: string }
-      pages.push(...body.value.map(toMeta))
+      const body = (await response.json()) as { value: T[]; '@odata.nextLink'?: string }
+      items.push(...body.value)
       const next = body['@odata.nextLink']
       path = next ? next.slice(next.indexOf('/me/onenote') + '/me/onenote'.length) : null
     }
-    return pages
+    return items
+  }
+
+  // Every page in a section (title, last change, links).
+  async listSectionPages(sectionId: string): Promise<PageMeta[]> {
+    const pages = await this.listAll<RawPage>(
+      `/sections/${encodeURIComponent(sectionId)}/pages?$select=id,title,lastModifiedDateTime,links&$expand=parentNotebook,parentSection&$top=100`,
+    )
+    return pages.map(toMeta)
+  }
+
+  // The account's notebooks and section groups (GET /sectionGroups lists the nested ones too).
+  async listPlaces(): Promise<Place[]> {
+    const notebooks = await this.listAll<{ id: string; displayName: string }>('/notebooks?$select=id,displayName')
+    const groups = await this.listAll<RawGroup>('/sectionGroups?$select=id,displayName&$expand=parentNotebook,parentSectionGroup')
+    const byId = new Map(groups.map((group) => [group.id, group]))
+    const pathOf = (group: RawGroup) => {
+      const names: string[] = []
+      for (let at: RawGroup | undefined = group; at && names.length < 20; at = at.parentSectionGroup ? byId.get(at.parentSectionGroup.id) : undefined) {
+        names.unshift(at.displayName)
+      }
+      return names
+    }
+    return [
+      ...notebooks.map((notebook) => ({ kind: 'notebook' as const, id: notebook.id, notebookId: notebook.id, notebookName: notebook.displayName, groupPath: [] })),
+      ...groups
+        .filter((group) => group.parentNotebook)
+        .map((group) => ({
+          kind: 'sectionGroup' as const,
+          id: group.id,
+          notebookId: group.parentNotebook!.id,
+          notebookName: group.parentNotebook!.displayName,
+          groupPath: pathOf(group),
+        })),
+    ]
+  }
+
+  // Every section in a notebook or section group, including the sections of section groups inside
+  // it, which are named "group › section".
+  async listPlaceSections(kind: Place['kind'], id: string, prefix = ''): Promise<Array<{ id: string; displayName: string }>> {
+    const base = `${kind === 'notebook' ? '/notebooks' : '/sectionGroups'}/${encodeURIComponent(id)}`
+    const sections = await this.listAll<{ id: string; displayName: string }>(`${base}/sections?$select=id,displayName`)
+    const groups = await this.listAll<{ id: string; displayName: string }>(`${base}/sectionGroups?$select=id,displayName`)
+    const all = sections.map((section) => ({ id: section.id, displayName: `${prefix}${section.displayName}` }))
+    for (const group of groups) all.push(...(await this.listPlaceSections('sectionGroup', group.id, `${prefix}${group.displayName} › `)))
+    return all
   }
 
   async findNotebook(displayName: string): Promise<{ id: string; displayName: string } | null> {
@@ -178,11 +239,6 @@ export class OneNoteClient {
     const response = await this.request('GET', `/notebooks?$filter=${filter}&$select=id,displayName`)
     const { value } = (await response.json()) as { value: Array<{ id: string; displayName: string }> }
     return value[0] ?? null
-  }
-
-  async listNotebooks(): Promise<Array<{ id: string; displayName: string }>> {
-    const response = await this.request('GET', '/notebooks?$select=id,displayName&$orderby=displayName')
-    return ((await response.json()) as { value: Array<{ id: string; displayName: string }> }).value
   }
 
   async listSections(notebookId: string): Promise<Array<{ id: string; displayName: string }>> {
@@ -207,12 +263,9 @@ export class OneNoteClient {
   }
 }
 
-// What the app may do in the recipe notebook (وصفاتي): read pages and create new ones. There is
-// deliberately no way to change or delete an existing page through this type.
-export type ReadCreateGraph = Pick<
-  OneNoteClient,
-  'getPageMeta' | 'getPageContent' | 'createPage' | 'findNotebook' | 'listNotebooks' | 'listSections' | 'listSectionPages'
->
+// What the app may do in the recipe library (the section group «الطبخ»): read pages and create new
+// ones. There is deliberately no way to change or delete an existing page through this type.
+export type ReadCreateGraph = Pick<OneNoteClient, 'getPageMeta' | 'getPageContent' | 'createPage' | 'listPlaces' | 'listPlaceSections' | 'listSectionPages'>
 
 // Wraps a client so that only the read/create methods exist at run time too.
 export function readCreateOnly(client: OneNoteClient): ReadCreateGraph {
@@ -220,9 +273,8 @@ export function readCreateOnly(client: OneNoteClient): ReadCreateGraph {
     getPageMeta: (id) => client.getPageMeta(id),
     getPageContent: (id) => client.getPageContent(id),
     createPage: (sectionId, html) => client.createPage(sectionId, html),
-    findNotebook: (name) => client.findNotebook(name),
-    listNotebooks: () => client.listNotebooks(),
-    listSections: (id) => client.listSections(id),
+    listPlaces: () => client.listPlaces(),
+    listPlaceSections: (kind, id) => client.listPlaceSections(kind, id),
     listSectionPages: (id) => client.listSectionPages(id),
   }
 }

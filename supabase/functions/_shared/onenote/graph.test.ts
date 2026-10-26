@@ -34,6 +34,50 @@ const pageJson = () =>
     { status: 200 },
   )
 
+const list = (value: unknown[], next?: string) =>
+  new Response(JSON.stringify({ value, ...(next ? { '@odata.nextLink': next } : {}) }), { status: 200 })
+
+describe('notebooks and section groups', () => {
+  it('lists section groups with their path in the notebook, nested ones too', async () => {
+    const { graph, fetchMock } = client([
+      list([{ id: 'nb1', displayName: 'البيت والطبخ' }]),
+      list(
+        [
+          { id: 'g1', displayName: 'الطبخ', parentNotebook: { id: 'nb1', displayName: 'البيت والطبخ' }, parentSectionGroup: null },
+          { id: 'g2', displayName: 'حلويات', parentNotebook: { id: 'nb1', displayName: 'البيت والطبخ' }, parentSectionGroup: { id: 'g1' } },
+        ],
+        'https://graph.microsoft.com/v1.0/me/onenote/sectionGroups?$skip=2',
+      ),
+      list([]),
+    ])
+    expect(await graph.listPlaces()).toEqual([
+      { kind: 'notebook', id: 'nb1', notebookId: 'nb1', notebookName: 'البيت والطبخ', groupPath: [] },
+      { kind: 'sectionGroup', id: 'g1', notebookId: 'nb1', notebookName: 'البيت والطبخ', groupPath: ['الطبخ'] },
+      { kind: 'sectionGroup', id: 'g2', notebookId: 'nb1', notebookName: 'البيت والطبخ', groupPath: ['الطبخ', 'حلويات'] },
+    ])
+    expect((fetchMock.mock.calls as unknown as string[][])[2][0]).toBe('https://graph.microsoft.com/v1.0/me/onenote/sectionGroups?$skip=2')
+  })
+
+  it('lists every section in a section group, naming nested ones by their group', async () => {
+    const { graph, fetchMock } = client([
+      list([{ id: 's1', displayName: 'سلطات' }]),
+      list([{ id: 'g2', displayName: 'حلويات' }]),
+      list([{ id: 's2', displayName: 'كيك' }]),
+      list([]),
+    ])
+    expect(await graph.listPlaceSections('sectionGroup', 'g1')).toEqual([
+      { id: 's1', displayName: 'سلطات' },
+      { id: 's2', displayName: 'حلويات › كيك' },
+    ])
+    expect((fetchMock.mock.calls as unknown as string[][]).map((call) => String(call[0]).replace('https://graph.microsoft.com/v1.0/me/onenote', ''))).toEqual([
+      '/sectionGroups/g1/sections?$select=id,displayName',
+      '/sectionGroups/g1/sectionGroups?$select=id,displayName',
+      '/sectionGroups/g2/sections?$select=id,displayName',
+      '/sectionGroups/g2/sectionGroups?$select=id,displayName',
+    ])
+  })
+})
+
 describe('OneNoteClient', () => {
   it('maps page metadata', async () => {
     const { graph } = client([pageJson()])
@@ -122,6 +166,6 @@ describe('assertWritable', () => {
 
   it('offers no way to change a page through the read/create client', () => {
     const { graph } = client([])
-    expect(Object.keys(readCreateOnly(graph)).sort()).toEqual(['createPage', 'findNotebook', 'getPageContent', 'getPageMeta', 'listNotebooks', 'listSectionPages', 'listSections'])
+    expect(Object.keys(readCreateOnly(graph)).sort()).toEqual(['createPage', 'getPageContent', 'getPageMeta', 'listPlaceSections', 'listPlaces', 'listSectionPages'])
   })
 })

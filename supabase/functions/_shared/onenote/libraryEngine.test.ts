@@ -100,15 +100,46 @@ beforeEach(() => {
   deps = { graph: onenote, store, appUrl: (id) => `https://app.example/#/recipe/${id}`, now: () => new Date(Date.UTC(2026, 9, 26, 12, 0, tick++)) }
 })
 
+describe('a section group as the library («الطبخ» in «البيت والطبخ»)', () => {
+  beforeEach(() => {
+    onenote = new FakeOneNote(
+      { 'sec-salads': 'nb-home', 'sec-soups': 'nb-home', 'sec-travel': 'nb-home' },
+      { 'nb-home': 'البيت والطبخ', 'grp-cooking': 'الطبخ', 'grp-travel': 'السفر', 'sec-salads': 'سلطات', 'sec-soups': 'شوربات', 'sec-travel': 'رحلات' },
+      { 'sec-salads': 'grp-cooking', 'sec-soups': 'grp-cooking', 'sec-travel': 'grp-travel' },
+    )
+    deps = { ...deps, graph: onenote }
+  })
+
+  it('reads only the pages in the group, and files new recipes under it', async () => {
+    const library = await connectLibrary(deps, 'grp-cooking')
+    expect(library).toMatchObject({ kind: 'sectionGroup', notebookName: 'البيت والطبخ', sectionGroup: 'الطبخ', sections: [{ name: 'سلطات' }, { name: 'شوربات' }] })
+
+    const salad = await onenote.createPage('sec-salads', HAND_MADE)
+    const trip = await onenote.createPage('sec-travel', page('رحلة', '<p>نص</p>'))
+    expect(await checkLibrary(deps)).toMatchObject({ pages: 1, unlinked: 1 })
+    await expect(addPage(deps, trip.id)).rejects.toMatchObject({ code: 'wrong_notebook' })
+
+    const recipeId = await addPage(deps, salad.id)
+    expect((await store.recipe(recipeId))!.doc.category).toEqual({ notebook: 'البيت والطبخ', section_group: 'الطبخ', section: 'سلطات' })
+
+    const created = await createRecipePage(deps, { doc: NEW_DOC, sectionName: 'شوربات', blank: true })
+    expect((await store.recipe(created.recipeId))!.doc.category).toMatchObject({ section_group: 'الطبخ', section: 'شوربات' })
+
+    // A page moved out of the group (to «السفر») is no longer the recipe's page.
+    onenote.movePage(salad.id, 'sec-travel')
+    expect((await checkLibrary(deps)).missing).toEqual([recipeId])
+  })
+})
+
 describe('the recipe notebook is read and created in, never edited', () => {
   it('connects to the notebook by name and lists its sections', async () => {
-    const library = await connectLibrary(deps, 'وصفاتي')
-    expect(library).toMatchObject({ notebookId: 'nb-real', sections: [{ id: 'sec-rice', name: 'أرز' }, { id: 'sec-sweets', name: 'حلويات' }] })
-    await expect(connectLibrary(deps, 'وصفات أخرى')).rejects.toMatchObject({ code: 'notebook_not_found' })
+    const library = await connectLibrary(deps, 'nb-real')
+    expect(library).toMatchObject({ notebookId: 'nb-real', sectionGroup: null, sections: [{ id: 'sec-rice', name: 'أرز' }, { id: 'sec-sweets', name: 'حلويات' }] })
+    await expect(connectLibrary(deps, 'nb-gone')).rejects.toMatchObject({ code: 'notebook_not_found' })
   })
 
   it('lists pages no recipe is linked to, and adds one as a recipe flagged for review', async () => {
-    await connectLibrary(deps, 'وصفاتي')
+    await connectLibrary(deps, 'nb-real')
     const created = await onenote.createPage('sec-rice', HAND_MADE)
     await onenote.createPage('sec-other', page('ليست وصفة', '<p>نص</p>'))
 
@@ -126,7 +157,7 @@ describe('the recipe notebook is read and created in, never edited', () => {
   })
 
   it('takes a change made in OneNote into the recipe and keeps the app fields', async () => {
-    await connectLibrary(deps, 'وصفاتي')
+    await connectLibrary(deps, 'nb-real')
     const created = await onenote.createPage('sec-rice', HAND_MADE)
     const recipeId = await addPage(deps, created.id)
     const stored = store.recipes.get(recipeId)!
@@ -143,7 +174,7 @@ describe('the recipe notebook is read and created in, never edited', () => {
   })
 
   it('marks a deleted page missing and keeps the recipe; a moved page can be linked again', async () => {
-    await connectLibrary(deps, 'وصفاتي')
+    await connectLibrary(deps, 'nb-real')
     const created = await onenote.createPage('sec-rice', HAND_MADE)
     const recipeId = await addPage(deps, created.id)
 
@@ -164,7 +195,7 @@ describe('the recipe notebook is read and created in, never edited', () => {
   })
 
   it('refreshes the recipes read longest ago, a few per check', async () => {
-    await connectLibrary(deps, 'وصفاتي')
+    await connectLibrary(deps, 'nb-real')
     const ids: string[] = []
     for (const title of ['أ', 'ب', 'ج']) ids.push(await addPage(deps, (await onenote.createPage('sec-rice', page(title, '<p>نص</p>'))).id))
     onenote.calls = []
@@ -176,7 +207,7 @@ describe('the recipe notebook is read and created in, never edited', () => {
   })
 
   it('creates a blank page with the template once, and links it', async () => {
-    await connectLibrary(deps, 'وصفاتي')
+    await connectLibrary(deps, 'nb-real')
     const created = await createRecipePage(deps, { doc: NEW_DOC, sectionName: 'أرز', blank: true })
     expect(created.webUrl).toMatch(/onenote\.example/)
     const link = (await store.link(created.recipeId))!
@@ -195,7 +226,7 @@ describe('the recipe notebook is read and created in, never edited', () => {
   })
 
   it('links imported recipes by their page_id, marking the ones not found', async () => {
-    await connectLibrary(deps, 'وصفاتي')
+    await connectLibrary(deps, 'nb-real')
     const created = await onenote.createPage('sec-rice', HAND_MADE)
     const outside = await onenote.createPage('sec-other', HAND_MADE)
     for (const [id, pageId] of [['rice-001', created.id], ['rice-002', 'gone'], ['rice-003', outside.id]]) {
@@ -209,13 +240,13 @@ describe('the recipe notebook is read and created in, never edited', () => {
   })
 
   it('never calls anything but reads and page creation', async () => {
-    await connectLibrary(deps, 'وصفاتي')
+    await connectLibrary(deps, 'nb-real')
     const created = await onenote.createPage('sec-rice', HAND_MADE)
     const recipeId = await addPage(deps, created.id)
     await refreshRecipe(deps, recipeId)
     await checkLibrary(deps)
     await createRecipePage(deps, { doc: NEW_DOC, sectionName: 'حلويات', blank: false })
     expect(onenote.patches).toEqual([])
-    expect(new Set(onenote.calls)).toEqual(new Set(['findNotebook', 'listSections', 'listSectionPages', 'getPageMeta', 'getPageContent', 'createPage']))
+    expect(new Set(onenote.calls)).toEqual(new Set(['listPlaces', 'listPlaceSections', 'listSectionPages', 'getPageMeta', 'getPageContent', 'createPage']))
   })
 })

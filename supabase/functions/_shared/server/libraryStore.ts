@@ -53,31 +53,48 @@ export class SupabaseLibraryStore implements LibraryStore {
 
   async library(): Promise<Library | null> {
     const row = check(
-      await this.admin.from('onenote_library').select('notebook_id,notebook_name,sections,last_checked_at').eq('household_id', this.householdId).maybeSingle(),
+      await this.admin
+        .from('onenote_library')
+        .select('place_kind,place_id,notebook_id,notebook_name,section_group,sections,last_checked_at')
+        .eq('household_id', this.householdId)
+        .maybeSingle(),
       'read library',
     )
     if (!row) return null
-    return { notebookId: row.notebook_id, notebookName: row.notebook_name, sections: row.sections, lastCheckedAt: row.last_checked_at }
+    return {
+      kind: row.place_kind,
+      placeId: row.place_id,
+      notebookId: row.notebook_id,
+      notebookName: row.notebook_name,
+      sectionGroup: row.section_group,
+      sections: row.sections,
+      lastCheckedAt: row.last_checked_at,
+    }
   }
 
   async saveLibrary(library: Library): Promise<void> {
     const existing = await this.library()
-    // Linking a different notebook starts over: links and the review list belong to the old one.
-    if (existing && existing.notebookId !== library.notebookId) {
+    // Linking a different notebook or section group starts over: links and the review list belong
+    // to the old one.
+    const same = existing?.placeId === library.placeId
+    if (existing && !same) {
       const ids = (await this.links()).map((link) => link.recipeId)
       if (ids.length) check(await this.admin.from('recipe_pages').delete().in('recipe_id', ids), 'clear links')
       check(await this.admin.from('onenote_unlinked_pages').delete().eq('household_id', this.householdId), 'clear review list')
     }
     const row = {
+      place_kind: library.kind,
+      place_id: library.placeId,
+      section_group: library.sectionGroup,
       notebook_id: library.notebookId,
       notebook_name: library.notebookName,
       sections: library.sections,
       last_checked_at: library.lastCheckedAt,
       last_error: null,
     }
-    // The same notebook keeps the Microsoft account that linked it; a new link uses the caller's.
+    // The same library keeps the Microsoft account that linked it; a new link uses the caller's.
     check(
-      existing && existing.notebookId === library.notebookId
+      same
         ? await this.admin.from('onenote_library').update(row).eq('household_id', this.householdId)
         : await this.admin.from('onenote_library').upsert({ household_id: this.householdId, user_id: this.userId, linked_at: new Date().toISOString(), ...row }, { onConflict: 'household_id' }),
       'save library',
