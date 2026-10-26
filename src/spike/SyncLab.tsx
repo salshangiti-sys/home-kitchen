@@ -98,7 +98,7 @@ function describeOutcome(outcome: SyncOutcome): string {
     if (outcome.pulled.length) parts.push(`أُخذ من OneNote: ${keys(outcome.pulled)}`)
   }
   if (outcome.conflicts.length) parts.push(`تعارض في: ${keys(outcome.conflicts)}`)
-  if (outcome.needsRepair.length) parts.push(`أقسام فقدت علامتها ولم تُكتب: ${keys(outcome.needsRepair)}`)
+  if (outcome.needsRepair.length) parts.push(`أقسام قُرئت ولم يكتبها التطبيق (قوائم OneNote أو جداول أو صور، أو فقدت علامتها): ${keys(outcome.needsRepair)}`)
   if (outcome.error) parts.push(outcome.error)
   return parts.join(' · ')
 }
