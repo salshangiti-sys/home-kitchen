@@ -31,6 +31,10 @@ export const href = {
   lab: '#/lab',
 }
 
+// The app's own address, including the folder it is served from (e.g. /home-kitchen/ on GitHub
+// Pages). Sign-in links and the Microsoft connection return here.
+export const appHome = () => new URL(import.meta.env.BASE_URL, window.location.origin).href
+
 export function navigate(to: string) {
   window.location.hash = to
 }

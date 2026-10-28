@@ -3,7 +3,7 @@
 // The app reads pages and creates new ones; it never changes or deletes a page.
 
 import { useCallback, useEffect, useState } from 'react'
-import { href, navigate } from '../router'
+import { appHome, href, navigate } from '../router'
 import { Button, Card, LinkButton, Notice } from '../ui'
 import { listRecipes, type RecipeSummary } from './api'
 import {
@@ -122,7 +122,7 @@ export default function OneNotePage() {
           <div className="flex flex-col gap-3">
             <p>{connection?.status === 'needs_reconnect' ? 'انتهى ربط الحساب أو أُلغي. اربطيه من جديد ليقرأ التطبيق دفترك.' : 'اربطي حساب Microsoft الذي فيه دفتر الوصفات.'}</p>
             <div>
-              <Button disabled={busy} onClick={() => act(() => connectMicrosoft(`${window.location.origin}/${href.onenote}`))}>اربطي حساب Microsoft</Button>
+              <Button disabled={busy} onClick={() => act(() => connectMicrosoft(`${appHome()}${href.onenote}`))}>اربطي حساب Microsoft</Button>
             </div>
           </div>
         )}

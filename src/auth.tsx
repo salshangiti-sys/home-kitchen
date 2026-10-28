@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
+import { appHome } from './router'
 import { Button, Card } from './ui'
 
 export type Role = 'owner' | 'editor' | 'viewer'
@@ -51,7 +52,7 @@ export function SignIn() {
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const send = async () => {
     setState('sending')
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } })
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: appHome() } })
     setState(error ? 'error' : 'sent')
   }
   return (

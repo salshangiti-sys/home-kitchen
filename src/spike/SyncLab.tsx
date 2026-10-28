@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { callFunction, supabase } from '../lib/supabase'
 import { SignIn } from '../auth'
+import { appHome } from '../router'
 import { SAMPLE_SECTIONS, sectionsToText, textToSections, type SectionsText } from './sectionsText'
 import type { RecipeSections } from '../../supabase/functions/_shared/onenote/sections.ts'
 
@@ -290,7 +291,7 @@ export default function SyncLab() {
 
   const connectMicrosoft = () =>
     act(async () => {
-      const { url } = await callFunction<{ url: string }>('ms-oauth-start', { returnTo: `${window.location.origin}/` })
+      const { url } = await callFunction<{ url: string }>('ms-oauth-start', { returnTo: appHome() })
       window.location.assign(url)
     })
 
