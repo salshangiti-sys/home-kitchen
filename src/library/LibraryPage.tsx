@@ -7,7 +7,8 @@ import { Badge, Button, LinkButton, Notice } from '../ui'
 import { countTrash, downloadJson, exportRecipes, listRecipes, type RecipeSummary } from './api'
 import { coverThumbs } from '../photos/api'
 import { matchesQuery, normalizeAr } from './normalize'
-import { STATUS_LABELS, type RecipeStatus } from './types'
+import BulkTagPanel from './BulkTagPanel'
+import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
 
 const STATUS_ICONS: Record<RecipeStatus, string> = { complete: '🍽', partial: '📝', link_only: '🔗', note_only: '🗒' }
@@ -22,6 +23,11 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   const [onlyFlagged, setOnlyFlagged] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState<string | null>(null)
+
+  // Tagging many at once: pick recipes, then change their tags together.
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkNote, setBulkNote] = useState<string | null>(null)
 
   const [trashed, setTrashed] = useState(0)
   const [covers, setCovers] = useState<Map<string, string>>(new Map())
@@ -49,6 +55,19 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
         matchesQuery(r.search_norm || normalizeAr(r.title), query),
     )
   }, [data, query, section, status, onlyFavorites, onlyFlagged])
+
+  // Only recipes that are shown count as selected: one filtered out of sight is never tagged.
+  const chosen = shown.filter((recipe) => selected.has(recipe.id)).map((recipe) => recipe.id)
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  const leaveSelecting = () => {
+    setSelecting(false)
+    setSelected(new Set())
+  }
 
   const doExport = async () => {
     setExporting(true)
@@ -122,11 +141,42 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
         </div>
       ) : (
         <>
-          <p className="text-sm text-muted">{shown.length === data.recipes.length ? `${shown.length} وصفة` : `${shown.length} من ${data.recipes.length} وصفة`}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted">{shown.length === data.recipes.length ? `${shown.length} وصفة` : `${shown.length} من ${data.recipes.length} وصفة`}</p>
+            {canEdit && !selecting && <Button kind="plain" onClick={() => setSelecting(true)}>توسيم عدة وصفات</Button>}
+          </div>
+          {bulkNote && <Notice>{bulkNote}</Notice>}
+          {selecting && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-line p-3">
+              <p className="text-sm">اختاري الوصفات ثم غيّري وسومها معًا. المحدّدة: {chosen.length}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button kind="plain" disabled={shown.length === 0} onClick={() => setSelected(new Set(shown.map((recipe) => recipe.id)))}>
+                  تحديد كل المعروضة ({shown.length})
+                </Button>
+                <Button kind="plain" disabled={chosen.length === 0} onClick={() => setSelected(new Set())}>إلغاء التحديد</Button>
+                <Button kind="plain" onClick={leaveSelecting}>تم</Button>
+              </div>
+              {chosen.length > 0 && (
+                <BulkTagPanel
+                  ids={chosen}
+                  onClose={() => setSelected(new Set())}
+                  onApplied={(changed) => {
+                    setBulkNote(`عُدّلت وسوم ${changed} ${changed === 1 ? 'وصفة' : 'وصفات'}. كل وصفة حفظت إصدارها السابق.`)
+                    setSelected(new Set())
+                    listRecipes().then(setData, (e: Error) => setError(e.message))
+                  }}
+                />
+              )}
+            </div>
+          )}
           <ul className="flex flex-col gap-2">
-            {shown.map((recipe) => (
-              <RecipeRow key={recipe.id} recipe={recipe} cover={covers.get(recipe.id)} favorite={data.favorites.has(recipe.id)} flagged={data.openFlags.has(recipe.id)} />
-            ))}
+            {shown.map((recipe) =>
+              selecting ? (
+                <SelectableRow key={recipe.id} recipe={recipe} checked={selected.has(recipe.id)} onToggle={() => toggle(recipe.id)} />
+              ) : (
+                <RecipeRow key={recipe.id} recipe={recipe} cover={covers.get(recipe.id)} favorite={data.favorites.has(recipe.id)} flagged={data.openFlags.has(recipe.id)} />
+              ),
+            )}
           </ul>
           {shown.length === 0 && <p className="text-muted">لا نتائج. جرّب كلمة أخرى أو ألغِ التصفية.</p>}
         </>
@@ -164,6 +214,26 @@ function RecipeRow({ recipe, cover, favorite, flagged }: { recipe: RecipeSummary
           {favorite && <span aria-label="مفضلة" className="text-amber-500">★</span>}
         </span>
       </a>
+    </li>
+  )
+}
+
+// In selection mode a row is a checkbox, with the tags it has now, so the choice is made knowingly.
+function SelectableRow({ recipe, checked, onToggle }: { recipe: RecipeSummary; checked: boolean; onToggle: () => void }) {
+  const tags = [
+    ...recipe.meal_types.map((type) => MEAL_TYPE_LABELS[type]),
+    recipe.kid_friendly === true && 'للأطفال',
+    recipe.lunchbox === true && 'لانش بوكس',
+  ].filter(Boolean)
+  return (
+    <li>
+      <label className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border bg-surface px-4 py-3 ${checked ? 'border-accent' : 'border-line'}`}>
+        <input type="checkbox" checked={checked} onChange={onToggle} className="size-6 shrink-0 accent-[var(--accent)]" />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span dir="auto" className="truncate font-medium">{recipe.title}</span>
+          <span dir="auto" className="text-sm text-muted">{recipe.section}{tags.length > 0 && ` · ${tags.join('، ')}`}</span>
+        </span>
+      </label>
     </li>
   )
 }
