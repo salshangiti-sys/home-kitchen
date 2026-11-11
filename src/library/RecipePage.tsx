@@ -10,6 +10,7 @@ import { href, navigate } from '../router'
 import { Badge, Button, LinkButton, Notice } from '../ui'
 import { loadRecipe, restoreRecipe, setFavorite, setFlagStatus, trashRecipe, type LoadedRecipe } from './api'
 import { explain } from '../offline/readThrough'
+import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeDoc } from './types'
 
@@ -128,6 +129,7 @@ export default function RecipePage({ id, canEdit, userId }: { id: string; canEdi
             )}
           </div>
         )}
+        <PhotoGallery recipeId={id} title={doc.title} canEdit={canEdit && !inTrash} />
         <div className="flex flex-wrap gap-2">
           {!inTrash && (doc.steps.length > 0 || doc.ingredient_groups.some((g) => g.items.length > 0)) && (
             <LinkButton href={href.cook(id)} kind="primary">وضع الطبخ</LinkButton>

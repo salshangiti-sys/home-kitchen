@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { href } from '../router'
 import { Badge, Button, LinkButton, Notice } from '../ui'
 import { countTrash, downloadJson, exportRecipes, listRecipes, type RecipeSummary } from './api'
+import { coverThumbs } from '../photos/api'
 import { matchesQuery, normalizeAr } from './normalize'
 import { STATUS_LABELS, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
@@ -23,10 +24,12 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   const [exportNote, setExportNote] = useState<string | null>(null)
 
   const [trashed, setTrashed] = useState(0)
+  const [covers, setCovers] = useState<Map<string, string>>(new Map())
 
   useEffect(() => {
     listRecipes().then(setData, (e: Error) => setError(e.message))
     if (canEdit) countTrash().then(setTrashed, () => undefined)
+    coverThumbs().then(setCovers)
   }, [canEdit])
 
   const sections = useMemo(() => {
@@ -122,7 +125,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
           <p className="text-sm text-muted">{shown.length === data.recipes.length ? `${shown.length} وصفة` : `${shown.length} من ${data.recipes.length} وصفة`}</p>
           <ul className="flex flex-col gap-2">
             {shown.map((recipe) => (
-              <RecipeRow key={recipe.id} recipe={recipe} favorite={data.favorites.has(recipe.id)} flagged={data.openFlags.has(recipe.id)} />
+              <RecipeRow key={recipe.id} recipe={recipe} cover={covers.get(recipe.id)} favorite={data.favorites.has(recipe.id)} flagged={data.openFlags.has(recipe.id)} />
             ))}
           </ul>
           {shown.length === 0 && <p className="text-muted">لا نتائج. جرّب كلمة أخرى أو ألغِ التصفية.</p>}
@@ -142,11 +145,15 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   )
 }
 
-function RecipeRow({ recipe, favorite, flagged }: { recipe: RecipeSummary; favorite: boolean; flagged: boolean }) {
+function RecipeRow({ recipe, cover, favorite, flagged }: { recipe: RecipeSummary; cover?: string; favorite: boolean; flagged: boolean }) {
   return (
     <li>
       <a href={href.recipe(recipe.id)} className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
-        <span aria-hidden className="text-xl">{STATUS_ICONS[recipe.status]}</span>
+        {cover ? (
+          <img src={cover} alt="" loading="lazy" className="size-12 shrink-0 rounded-lg border border-line object-cover" />
+        ) : (
+          <span aria-hidden className="text-xl">{STATUS_ICONS[recipe.status]}</span>
+        )}
         <span className="flex min-w-0 flex-1 flex-col">
           <span dir="auto" className="truncate font-medium">{recipe.title}</span>
           <span dir="auto" className="text-sm text-muted">{recipe.section}</span>
