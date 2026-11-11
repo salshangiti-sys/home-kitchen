@@ -25,6 +25,8 @@ export class NotAllowedError extends Error {
 }
 
 export interface GraphDeps {
+  // The Graph address paths are added to. OneNote by default; the backup uses the user's OneDrive.
+  baseUrl?: string
   // forceRefresh is set after a 401 so the token is renewed once before giving up.
   getAccessToken(forceRefresh: boolean): Promise<string>
   fetch?: typeof fetch
@@ -114,7 +116,7 @@ export class OneNoteClient {
       const token = await this.deps.getAccessToken(refreshed)
       let response: Response
       try {
-        response = await this.fetchImpl(`${GRAPH}${path}`, {
+        response = await this.fetchImpl(`${this.deps.baseUrl ?? GRAPH}${path}`, {
           method,
           headers: {
             Authorization: `Bearer ${token}`,

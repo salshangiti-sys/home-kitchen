@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { canEdit, SignIn, useAuth } from './auth'
 import ImportPage from './library/ImportPage'
 import LibraryPage from './library/LibraryPage'
+import { backupState, loadBackupRuns, needsAttention, type BackupState } from './library/backupStatus'
 import { checkIfDue, loadLibrary } from './library/onenote'
 import { InstallHint, OfflineNotice } from './offline/Status'
+import { Notice } from './ui'
 import OneNotePage from './library/OneNotePage'
 import RecipeEditor from './library/RecipeEditor'
 import RecipePage from './library/RecipePage'
@@ -50,6 +52,16 @@ function useNotebookCheck(enabled: boolean) {
   }, [enabled])
 }
 
+// For the owner: a notice when the nightly backup is failing or has stopped.
+function useBackupAlert(enabled: boolean): BackupState | null {
+  const [state, setState] = useState<BackupState | null>(null)
+  useEffect(() => {
+    if (!enabled) return
+    loadBackupRuns(5).then((runs) => setState(backupState(runs)), () => undefined)
+  }, [enabled])
+  return state && needsAttention(state) ? state : null
+}
+
 const NAV: Array<{ label: string; to: string; match: Route['name'][]; editorsOnly?: boolean }> = [
   { label: 'الوصفات', to: href.library, match: ['library', 'recipe'] },
   { label: 'وصفة جديدة', to: href.new, match: ['new'], editorsOnly: true },
@@ -63,6 +75,7 @@ export default function App() {
   const auth = useAuth()
   const editor = canEdit(auth.role)
   useNotebookCheck(auth.session != null && editor)
+  const backupAlert = useBackupAlert(auth.session != null && editor)
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-5">
@@ -108,6 +121,11 @@ export default function App() {
 
       <main className="flex flex-col gap-6 pb-10">
         {auth.session && <OfflineNotice />}
+        {backupAlert && (
+          <Notice tone="error">
+            النسخ الاحتياطي الليلي يحتاج انتباهك. <a href={href.onenote} className="underline">افتحي صفحة OneNote</a> لترين السبب.
+          </Notice>
+        )}
         {!auth.ready ? null : !auth.session ? <SignIn /> : <Screen route={route} editor={editor} userId={auth.session.user.id} />}
         {auth.session && <InstallHint />}
       </main>

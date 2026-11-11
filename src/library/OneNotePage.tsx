@@ -7,6 +7,7 @@ import { explain } from '../offline/readThrough'
 import { appHome, href, navigate } from '../router'
 import { Button, Card, LinkButton, Notice } from '../ui'
 import { listRecipes, type RecipeSummary } from './api'
+import BackupCard from './BackupCard'
 import {
   addPageAsRecipe,
   checkNotebook,
@@ -200,6 +201,8 @@ export default function OneNotePage() {
           )}
         </Card>
       )}
+
+      <BackupCard />
 
       {library && unlinked.length > 0 && (
         <Card title={`صفحات ليست في التطبيق (${unlinked.length})`}>
