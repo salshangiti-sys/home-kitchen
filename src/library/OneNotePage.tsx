@@ -3,6 +3,7 @@
 // The app reads pages and creates new ones; it never changes or deletes a page.
 
 import { useCallback, useEffect, useState } from 'react'
+import { explain } from '../offline/readThrough'
 import { appHome, href, navigate } from '../router'
 import { Button, Card, LinkButton, Notice } from '../ui'
 import { listRecipes, type RecipeSummary } from './api'
@@ -62,7 +63,7 @@ export default function OneNotePage() {
       setNotice({ text: MS_RETURN[ms] ?? ms, error: ms !== 'connected' })
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.hash}`)
     }
-    load().catch((e: Error) => setNotice({ text: e.message, error: true }))
+    load().catch((e: Error) => setNotice({ text: explain(e).message, error: true }))
   }, [load])
 
   // When choosing, list the account's notebooks and section groups, «الطبخ» first.
@@ -77,7 +78,7 @@ export default function OneNotePage() {
         setPlaces(sorted)
         setPlaceId((current) => current ?? (sorted[0] && preferred(sorted[0]) === 0 ? sorted[0].id : null))
       },
-      (e: Error) => setNotice({ text: e.message, error: true }),
+      (e: Error) => setNotice({ text: explain(e).message, error: true }),
     )
   }, [choosing, places])
 
@@ -88,7 +89,7 @@ export default function OneNotePage() {
       const text = await work()
       if (text) setNotice({ text })
     } catch (e) {
-      setNotice({ text: (e as Error).message, error: true })
+      setNotice({ text: explain(e).message, error: true })
     } finally {
       await load().catch(() => undefined)
       setBusy(false)

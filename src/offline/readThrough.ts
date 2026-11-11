@@ -37,6 +37,13 @@ export function looksOffline(error?: unknown): boolean {
   return /failed to fetch|networkerror|network request failed|load failed|internet connection|offline/i.test(message)
 }
 
+// Shown instead of the browser's raw "Failed to fetch".
+export const OFFLINE_MESSAGE = 'يحتاج هذا إلى اتصال بالإنترنت. حاولي مرة أخرى حين يعود الاتصال.'
+export const OFFLINE_NO_COPY = 'لا يوجد اتصال بالإنترنت، ولا توجد نسخة محفوظة على هذا الجهاز بعد. افتحي التطبيق مرة وأنتِ متصلة، ثم يمكنك قراءة الوصفات دون إنترنت.'
+
+// The error as a person should read it: a missing connection says so; anything else is unchanged.
+export const explain = (error: unknown): Error => (looksOffline(error) ? new Error(OFFLINE_MESSAGE) : error instanceof Error ? error : new Error(String(error)))
+
 interface Saved<T> {
   savedAt: string
   value: T
@@ -62,6 +69,7 @@ export async function readThrough<T>(name: string, load: () => Promise<T>, fallb
     if (looksOffline(error)) {
       const copy = (await saved<T>(name)) ?? (await fallback?.())
       if (copy !== undefined) return copy
+      throw new Error(OFFLINE_NO_COPY)
     }
     throw error
   }

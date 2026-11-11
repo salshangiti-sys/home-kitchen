@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { looksOffline, readThrough, save, saved, setCacheOwner, useStore } from './readThrough'
+import { explain, looksOffline, OFFLINE_MESSAGE, OFFLINE_NO_COPY, readThrough, save, saved, setCacheOwner, useStore } from './readThrough'
 import { memoryStore } from './store'
 
 let kv: ReturnType<typeof memoryStore>
@@ -28,12 +28,17 @@ describe('reads with a saved copy', () => {
 
   it('has nothing to fall back on the first time offline, and says so', async () => {
     await setCacheOwner('u1')
-    await expect(readThrough('list', offline)).rejects.toThrow('Failed to fetch')
+    await expect(readThrough('list', offline)).rejects.toThrow(OFFLINE_NO_COPY)
   })
 
   it('uses a copy built from other saved items when the item itself was never opened', async () => {
     await setCacheOwner('u1')
     expect(await readThrough('recipe:a', offline, async () => 'from the list')).toBe('from the list')
+  })
+
+  it('explains a missing connection in words, and leaves other errors alone', () => {
+    expect(explain(new TypeError('Failed to fetch')).message).toBe(OFFLINE_MESSAGE)
+    expect(explain(new Error('permission denied')).message).toBe('permission denied')
   })
 
   it('treats a device that reports no connection as offline', async () => {

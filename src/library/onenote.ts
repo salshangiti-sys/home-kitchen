@@ -2,6 +2,7 @@
 // it never changes an existing page (see supabase/functions/onenote-library).
 
 import { callFunction, supabase } from '../lib/supabase'
+import { explain, looksOffline } from '../offline/readThrough'
 import type { RecipeDoc } from './types'
 
 export interface LibraryInfo {
@@ -83,6 +84,7 @@ async function call<T>(action: string, body: Record<string, unknown> = {}): Prom
     return await callFunction<T>('onenote-library', { action, ...body })
   } catch (error) {
     const code = (error as { code?: string }).code
+    if (looksOffline(error)) throw explain(error)
     throw new Error(code && ERRORS[code] ? ERRORS[code] : (error as Error).message)
   }
 }
