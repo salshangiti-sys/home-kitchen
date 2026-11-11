@@ -6,6 +6,7 @@ export type Route =
   | { name: 'library' }
   | { name: 'recipe'; id: string }
   | { name: 'edit'; id: string }
+  | { name: 'cook'; id: string }
   | { name: 'new' }
   | { name: 'import' }
   | { name: 'trash' }
@@ -14,7 +15,11 @@ export type Route =
 
 export function parseHash(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent)
-  if (parts[0] === 'r' && parts[1]) return parts[2] === 'edit' ? { name: 'edit', id: parts[1] } : { name: 'recipe', id: parts[1] }
+  if (parts[0] === 'r' && parts[1]) {
+    if (parts[2] === 'edit') return { name: 'edit', id: parts[1] }
+    if (parts[2] === 'cook') return { name: 'cook', id: parts[1] }
+    return { name: 'recipe', id: parts[1] }
+  }
   if (parts[0] === 'new') return { name: 'new' }
   if (parts[0] === 'import') return { name: 'import' }
   if (parts[0] === 'trash') return { name: 'trash' }
@@ -27,6 +32,7 @@ export const href = {
   library: '#/',
   recipe: (id: string) => `#/r/${encodeURIComponent(id)}`,
   edit: (id: string) => `#/r/${encodeURIComponent(id)}/edit`,
+  cook: (id: string) => `#/r/${encodeURIComponent(id)}/cook`,
   new: '#/new',
   import: '#/import',
   trash: '#/trash',

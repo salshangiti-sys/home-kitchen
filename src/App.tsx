@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { canEdit, SignIn, useAuth } from './auth'
 import ImportPage from './library/ImportPage'
 import LibraryPage from './library/LibraryPage'
+import CookMode from './cook/CookMode'
 import { backupState, loadBackupRuns, needsAttention, type BackupState } from './library/backupStatus'
 import { checkIfDue, loadLibrary } from './library/onenote'
 import { InstallHint, OfflineNotice } from './offline/Status'
@@ -75,12 +76,14 @@ export default function App() {
   const route = useRoute()
   const auth = useAuth()
   const editor = canEdit(auth.role)
+  // Cook mode shows only the recipe: no title bar, menu or reminders.
+  const cooking = route.name === 'cook'
   useNotebookCheck(auth.session != null && editor)
   const backupAlert = useBackupAlert(auth.session != null && editor)
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      {!cooking && <header className="flex flex-wrap items-center justify-between gap-3">
         <a href={href.library}>
           <h1 className="text-2xl font-bold">مطبخ البيت</h1>
         </a>
@@ -100,9 +103,9 @@ export default function App() {
             </button>
           ))}
         </div>
-      </header>
+      </header>}
 
-      {auth.session && (
+      {auth.session && !cooking && (
         <nav aria-label="الأقسام الرئيسية" className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4">
           {NAV.filter((item) => editor || !item.editorsOnly).map((item) => {
             const active = item.match.includes(route.name) || (route.name === 'edit' && item.to === href.library)
@@ -122,13 +125,13 @@ export default function App() {
 
       <main className="flex flex-col gap-6 pb-10">
         {auth.session && <OfflineNotice />}
-        {backupAlert && (
+        {backupAlert && !cooking && (
           <Notice tone="error">
             النسخ الاحتياطي الليلي يحتاج انتباهك. <a href={href.onenote} className="underline">افتحي صفحة OneNote</a> لترين السبب.
           </Notice>
         )}
         {!auth.ready ? null : !auth.session ? <SignIn /> : <Screen route={route} editor={editor} userId={auth.session.user.id} />}
-        {auth.session && <InstallHint />}
+        {auth.session && !cooking && <InstallHint />}
       </main>
     </div>
   )
@@ -146,6 +149,8 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return editor ? <RecipeEditor key="new" id={null} /> : <LibraryPage canEdit={false} />
     case 'import':
       return editor ? <ImportPage /> : <LibraryPage canEdit={false} />
+    case 'cook':
+      return <CookMode key={route.id} id={route.id} />
     case 'trash':
       return editor ? <TrashPage /> : <LibraryPage canEdit={false} />
     case 'onenote':

@@ -129,6 +129,9 @@ export default function RecipePage({ id, canEdit, userId }: { id: string; canEdi
           </div>
         )}
         <div className="flex flex-wrap gap-2">
+          {!inTrash && (doc.steps.length > 0 || doc.ingredient_groups.some((g) => g.items.length > 0)) && (
+            <LinkButton href={href.cook(id)} kind="primary">وضع الطبخ</LinkButton>
+          )}
           <Button kind="plain" onClick={toggleFavorite}>{favorite ? '★ في المفضلة' : '☆ أضف للمفضلة'}</Button>
           {canEdit && page?.web_url && <LinkButton external kind="primary" href={page.web_url}>تعديل في OneNote ↗</LinkButton>}
           {canEdit && !inTrash && <LinkButton href={href.edit(id)}>{page ? 'الوسوم والتخطيط' : 'تعديل'}</LinkButton>}
