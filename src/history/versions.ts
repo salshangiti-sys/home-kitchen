@@ -28,6 +28,20 @@ export const listVersions = (recipeId: string): Promise<RecipeVersion[]> =>
     return data as RecipeVersion[]
   })
 
+export interface RestoreResult {
+  version: number
+  result: 'updated' | 'unchanged'
+}
+
+// Saves an earlier version as a new one. The database reads the copy itself (it is never sent from
+// here) and refuses a recipe in the trash, one linked to a OneNote page, or one that has changed
+// since `expectedVersion` was read.
+export async function restoreVersion(recipeId: string, version: number, expectedVersion: number): Promise<RestoreResult> {
+  const { data, error } = await supabase.rpc('restore_recipe_version', { p_recipe_id: recipeId, p_version: version, p_expected_version: expectedVersion })
+  if (error) throw new Error(error.message)
+  return data as RestoreResult
+}
+
 export function originLabel(origin: Origin, version: number): string {
   switch (origin) {
     case 'app':

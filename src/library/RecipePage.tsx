@@ -42,6 +42,7 @@ function describeFlag(flag: string): string {
 export default function RecipePage({ id, canEdit, userId, startLogging = false }: { id: string; canEdit: boolean; userId: string; startLogging?: boolean }) {
   const [loaded, setLoaded] = useState<LoadedRecipe | null | undefined>(undefined)
   const [page, setPage] = useState<PageLink | null>(null)
+  const [pageKnown, setPageKnown] = useState(false) // whether the OneNote link has been looked up yet
   const [reading, setReading] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [moving, setMoving] = useState(false)
@@ -49,7 +50,13 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
 
   const load = useCallback(() => {
     loadRecipe(id).then(setLoaded, (e: Error) => setError(e.message))
-    loadRecipePage(id).then(setPage, () => setPage(null))
+    loadRecipePage(id).then(
+      (link) => {
+        setPage(link)
+        setPageKnown(true)
+      },
+      () => setPage(null), // not known: stays unknown, so a recipe is never offered a restore it may not allow
+    )
   }, [id])
   useEffect(load, [load])
 
@@ -214,7 +221,12 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
 
       <CookHistory recipeId={id} userId={userId} canLog={!inTrash} startLogging={startLogging} />
 
-      <VersionHistory recipeId={id} currentVersion={loaded.version} />
+      <VersionHistory
+        recipeId={id}
+        currentVersion={loaded.version}
+        restore={!canEdit || inTrash || loaded.version === 0 || !pageKnown ? 'no' : page ? 'linked' : 'yes'}
+        onRestored={load}
+      />
 
       {(doc.media?.length ?? 0) > 0 && (
         <p className="text-sm text-muted">في صفحة OneNote الأصلية {doc.media!.length === 1 ? 'صورة أو فيديو لم يُنقل' : `${doc.media!.length} صور أو فيديوهات لم تُنقل`}. إضافة الصور للوصفة قادمة لاحقًا.</p>
