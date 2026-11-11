@@ -2,6 +2,7 @@
 // save_recipe / import_recipes, which check the caller's role and the recipe's version.
 
 import { supabase } from '../lib/supabase'
+import { readThrough, save, saved } from '../offline/readThrough'
 import type { ImportOutcome } from './importReport'
 import type { MealType, RecipeDoc, RecipeStatus } from './types'
 
@@ -40,7 +41,12 @@ function fail(error: { message: string } | null): asserts error is null {
   if (error) throw new Error(error.message)
 }
 
-export async function listRecipes(): Promise<{ recipes: RecipeSummary[]; favorites: Set<string>; openFlags: Set<string> }> {
+type RecipeList = { recipes: RecipeSummary[]; favorites: Set<string>; openFlags: Set<string> }
+
+// With no connection, the last list seen on this device is shown (see src/offline).
+export const listRecipes = (): Promise<RecipeList> => readThrough('list', fetchRecipeList)
+
+async function fetchRecipeList(): Promise<RecipeList> {
   const [recipes, favorites, flags] = await Promise.all([
     supabase
       .from('recipes')
@@ -63,7 +69,17 @@ export async function listRecipes(): Promise<{ recipes: RecipeSummary[]; favorit
   }
 }
 
-export async function loadRecipe(id: string): Promise<LoadedRecipe | null> {
+// With no connection, the recipe as last opened here, or else as last saved in the background copy
+// of every recipe (without its review notes, and read-only: it has no version to save against).
+export const loadRecipe = (id: string): Promise<LoadedRecipe | null> =>
+  readThrough(`recipe:${id}`, () => fetchRecipe(id), async () => {
+    const doc = (await saved<Record<string, RecipeDoc>>('docs'))?.[id]
+    if (!doc) return undefined
+    const list = await saved<RecipeList>('list')
+    return { doc, version: 0, favorite: list?.favorites.has(id) ?? false, flags: [] }
+  })
+
+async function fetchRecipe(id: string): Promise<LoadedRecipe | null> {
   const [doc, row, favorite, flags] = await Promise.all([
     supabase.rpc('recipe_doc', { recipe_id: id }),
     supabase.from('recipes').select('version').eq('id', id).maybeSingle(),
@@ -111,6 +127,18 @@ export async function exportRecipes(): Promise<RecipeDoc[]> {
   const { data, error } = await supabase.rpc('export_recipes')
   fail(error)
   return data as RecipeDoc[]
+}
+
+const COPY_EVERY_MS = 6 * 60 * 60 * 1000
+
+// Saves every recipe on this device (one request) so any of them can be read with no signal.
+// Runs at most every few hours.
+export async function keepRecipesForOffline(): Promise<void> {
+  const last = await saved<string>('docs-saved-at')
+  if (last && Date.now() - Date.parse(last) < COPY_EVERY_MS) return
+  const docs = await exportRecipes()
+  await save('docs', Object.fromEntries(docs.map((doc) => [doc.id, doc])))
+  await save('docs-saved-at', new Date().toISOString())
 }
 
 export function downloadJson(name: string, value: unknown) {

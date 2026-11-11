@@ -3,6 +3,7 @@ import { canEdit, SignIn, useAuth } from './auth'
 import ImportPage from './library/ImportPage'
 import LibraryPage from './library/LibraryPage'
 import { checkIfDue, loadLibrary } from './library/onenote'
+import { InstallHint, OfflineNotice } from './offline/Status'
 import OneNotePage from './library/OneNotePage'
 import RecipeEditor from './library/RecipeEditor'
 import RecipePage from './library/RecipePage'
@@ -106,7 +107,9 @@ export default function App() {
       )}
 
       <main className="flex flex-col gap-6 pb-10">
+        {auth.session && <OfflineNotice />}
         {!auth.ready ? null : !auth.session ? <SignIn /> : <Screen route={route} editor={editor} userId={auth.session.user.id} />}
+        {auth.session && <InstallHint />}
       </main>
     </div>
   )

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
+import { keepRecipesForOffline } from './library/api'
+import { looksOffline, readThrough, setCacheOwner } from './offline/readThrough'
 import { appHome } from './router'
 import { Button, Card } from './ui'
 
@@ -19,12 +21,16 @@ export function useAuth(): Auth {
   const [ready, setReady] = useState(false)
   const [role, setRole] = useState<Role | null>(null)
 
+  // The offline copy on this device belongs to whoever is signed in, so the app learns who that is
+  // (or that no one is) before showing anything that reads data.
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+    const settle = async (next: Session | null) => {
+      await setCacheOwner(next?.user.id ?? null)
+      setSession(next)
       setReady(true)
-    })
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next))
+    }
+    supabase.auth.getSession().then(({ data }) => settle(data.session))
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => void settle(next))
     return () => data.subscription.unsubscribe()
   }, [])
 
@@ -36,10 +42,19 @@ export function useAuth(): Auth {
     }
     // The owner's household is created on first sign-in. (Adding the sister as a viewer of it comes
     // in Phase 3.)
-    supabase.rpc('ensure_own_household').then(async () => {
-      const { data } = await supabase.from('household_members').select('role').eq('user_id', userId).order('created_at').limit(1).maybeSingle()
-      setRole((data?.role as Role | undefined) ?? null)
-    })
+    readThrough<Role | null>('role', async () => {
+      const ensured = await supabase.rpc('ensure_own_household')
+      if (ensured.error && looksOffline(ensured.error.message)) throw new Error(ensured.error.message)
+      const { data, error } = await supabase.from('household_members').select('role').eq('user_id', userId).order('created_at').limit(1).maybeSingle()
+      if (error) throw new Error(error.message)
+      return (data?.role as Role | undefined) ?? null
+    }).then(
+      (found) => {
+        setRole(found)
+        if (navigator.onLine) keepRecipesForOffline().catch(() => undefined)
+      },
+      () => setRole(null),
+    )
   }, [userId])
 
   return { ready, session, role }
