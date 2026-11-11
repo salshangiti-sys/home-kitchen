@@ -12,7 +12,7 @@ name: Publish the app
 
 on:
   push:
-    branches: [main, 'ci-check/**'] # ci-check/** only to try the checks; publishing is main-only
+    branches: [main]
   workflow_dispatch:
 
 permissions:
