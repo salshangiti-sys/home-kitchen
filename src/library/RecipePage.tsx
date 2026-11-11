@@ -11,6 +11,7 @@ import { Badge, Button, LinkButton, Notice } from '../ui'
 import { loadRecipe, restoreRecipe, setFavorite, setFlagStatus, trashRecipe, type LoadedRecipe } from './api'
 import { explain } from '../offline/readThrough'
 import CookHistory from '../history/CookHistory'
+import VersionHistory from '../history/VersionHistory'
 import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeDoc } from './types'
@@ -212,6 +213,8 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
       )}
 
       <CookHistory recipeId={id} userId={userId} canLog={!inTrash} startLogging={startLogging} />
+
+      <VersionHistory recipeId={id} currentVersion={loaded.version} />
 
       {(doc.media?.length ?? 0) > 0 && (
         <p className="text-sm text-muted">في صفحة OneNote الأصلية {doc.media!.length === 1 ? 'صورة أو فيديو لم يُنقل' : `${doc.media!.length} صور أو فيديوهات لم تُنقل`}. إضافة الصور للوصفة قادمة لاحقًا.</p>
