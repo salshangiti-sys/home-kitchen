@@ -7,6 +7,7 @@ import { checkIfDue, loadLibrary } from './library/onenote'
 import { InstallHint, OfflineNotice } from './offline/Status'
 import { Notice } from './ui'
 import OneNotePage from './library/OneNotePage'
+import TrashPage from './library/TrashPage'
 import RecipeEditor from './library/RecipeEditor'
 import RecipePage from './library/RecipePage'
 import { href, useRoute, type Route } from './router'
@@ -145,6 +146,8 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return editor ? <RecipeEditor key="new" id={null} /> : <LibraryPage canEdit={false} />
     case 'import':
       return editor ? <ImportPage /> : <LibraryPage canEdit={false} />
+    case 'trash':
+      return editor ? <TrashPage /> : <LibraryPage canEdit={false} />
     case 'onenote':
       return editor ? <OneNotePage /> : <LibraryPage canEdit={false} />
     case 'lab':

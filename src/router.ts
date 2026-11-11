@@ -8,6 +8,7 @@ export type Route =
   | { name: 'edit'; id: string }
   | { name: 'new' }
   | { name: 'import' }
+  | { name: 'trash' }
   | { name: 'onenote' }
   | { name: 'lab' }
 
@@ -16,6 +17,7 @@ export function parseHash(hash: string): Route {
   if (parts[0] === 'r' && parts[1]) return parts[2] === 'edit' ? { name: 'edit', id: parts[1] } : { name: 'recipe', id: parts[1] }
   if (parts[0] === 'new') return { name: 'new' }
   if (parts[0] === 'import') return { name: 'import' }
+  if (parts[0] === 'trash') return { name: 'trash' }
   if (parts[0] === 'onenote') return { name: 'onenote' }
   if (parts[0] === 'lab') return { name: 'lab' }
   return { name: 'library' }
@@ -27,6 +29,7 @@ export const href = {
   edit: (id: string) => `#/r/${encodeURIComponent(id)}/edit`,
   new: '#/new',
   import: '#/import',
+  trash: '#/trash',
   onenote: '#/onenote',
   lab: '#/lab',
 }

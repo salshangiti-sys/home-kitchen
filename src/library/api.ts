@@ -27,6 +27,8 @@ export interface RecipeFlag {
 export interface LoadedRecipe {
   doc: RecipeDoc
   version: number
+  // When it was moved to the trash, if it is there.
+  trashedAt: string | null
   favorite: boolean
   flags: RecipeFlag[]
 }
@@ -76,13 +78,13 @@ export const loadRecipe = (id: string): Promise<LoadedRecipe | null> =>
     const doc = (await saved<Record<string, RecipeDoc>>('docs'))?.[id]
     if (!doc) return undefined
     const list = await saved<RecipeList>('list')
-    return { doc, version: 0, favorite: list?.favorites.has(id) ?? false, flags: [] }
+    return { doc, version: 0, trashedAt: null, favorite: list?.favorites.has(id) ?? false, flags: [] }
   })
 
 async function fetchRecipe(id: string): Promise<LoadedRecipe | null> {
   const [doc, row, favorite, flags] = await Promise.all([
     supabase.rpc('recipe_doc', { recipe_id: id }),
-    supabase.from('recipes').select('version').eq('id', id).maybeSingle(),
+    supabase.from('recipes').select('version,deleted_at').eq('id', id).maybeSingle(),
     supabase.from('user_favorites').select('recipe_id').eq('recipe_id', id).maybeSingle(),
     supabase.from('recipe_flags').select('id,flag,status').eq('recipe_id', id).order('flag'),
   ])
@@ -92,6 +94,7 @@ async function fetchRecipe(id: string): Promise<LoadedRecipe | null> {
   return {
     doc: doc.data as RecipeDoc,
     version: row.data.version as number,
+    trashedAt: (row.data.deleted_at as string | null) ?? null,
     favorite: !!favorite.data,
     flags: (flags.data ?? []) as RecipeFlag[],
   }
@@ -103,6 +106,36 @@ export async function saveRecipe(doc: RecipeDoc, expectedVersion: number | null)
   if (error?.message === 'version_conflict') throw new VersionConflictError()
   fail(error)
   return (data as { id: string }).id
+}
+
+// Trash: a recipe is hidden, not erased, and can be restored. Only owners and editors can do either.
+export interface TrashedRecipe {
+  id: string
+  title: string
+  section: string
+  deleted_at: string
+}
+
+export async function trashRecipe(id: string): Promise<void> {
+  const { error } = await supabase.rpc('trash_recipe', { p_id: id })
+  fail(error)
+}
+
+export async function restoreRecipe(id: string): Promise<void> {
+  const { error } = await supabase.rpc('restore_recipe', { p_id: id })
+  fail(error)
+}
+
+export async function countTrash(): Promise<number> {
+  const { count, error } = await supabase.from('recipes').select('id', { count: 'exact', head: true }).not('deleted_at', 'is', null)
+  fail(error)
+  return count ?? 0
+}
+
+export async function listTrash(): Promise<TrashedRecipe[]> {
+  const { data, error } = await supabase.from('recipes').select('id,title,section,deleted_at').not('deleted_at', 'is', null).order('deleted_at', { ascending: false })
+  fail(error)
+  return data as TrashedRecipe[]
 }
 
 export async function setFavorite(recipeId: string, userId: string, favorite: boolean): Promise<void> {

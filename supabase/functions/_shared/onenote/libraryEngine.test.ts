@@ -44,8 +44,12 @@ class MemoryStore implements LibraryStore {
     this.recipes.set(id, { doc: next, version: (current?.version ?? 0) + 1 })
     return { id, result: current ? ('updated' as const) : ('created' as const) }
   }
+  trashed = new Set<string>()
   async links() {
-    return [...this.pageLinks.values()]
+    return [...this.pageLinks.values()].filter((link) => !this.trashed.has(link.recipeId))
+  }
+  async trashedPageIds() {
+    return [...this.pageLinks.values()].filter((link) => this.trashed.has(link.recipeId)).map((link) => link.pageId)
   }
   async link(id: string) {
     return this.pageLinks.get(id) ?? null
@@ -204,6 +208,21 @@ describe('the recipe notebook is read and created in, never edited', () => {
     expect(onenote.calls.filter((call) => call === 'getPageContent')).toHaveLength(2)
     const read = await Promise.all(ids.map(async (id) => (await store.link(id))!.lastReadAt))
     expect(read[2]! < read[0]!).toBe(true) // the third one was not read this time
+  })
+
+  it('does not offer the page of a trashed recipe for adding again, and does not read or flag it', async () => {
+    await connectLibrary(deps, 'nb-real')
+    const created = await onenote.createPage('sec-rice', HAND_MADE)
+    const recipeId = await addPage(deps, created.id)
+    store.trashed.add(recipeId)
+
+    const summary = await checkLibrary(deps)
+    expect(summary).toMatchObject({ pages: 1, unlinked: 0, missing: [], refreshed: 0 })
+    expect(store.unlinked).toEqual([])
+    expect((await store.link(recipeId))!.readStatus).toBe('ok')
+
+    store.trashed.delete(recipeId) // restored: read again as before
+    expect((await checkLibrary(deps)).refreshed).toBe(1)
   })
 
   it('creates a blank page with the template once, and links it', async () => {

@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { href } from '../router'
 import { Badge, Button, LinkButton, Notice } from '../ui'
-import { downloadJson, exportRecipes, listRecipes, type RecipeSummary } from './api'
+import { countTrash, downloadJson, exportRecipes, listRecipes, type RecipeSummary } from './api'
 import { matchesQuery, normalizeAr } from './normalize'
 import { STATUS_LABELS, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
@@ -22,9 +22,12 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState<string | null>(null)
 
+  const [trashed, setTrashed] = useState(0)
+
   useEffect(() => {
     listRecipes().then(setData, (e: Error) => setError(e.message))
-  }, [])
+    if (canEdit) countTrash().then(setTrashed, () => undefined)
+  }, [canEdit])
 
   const sections = useMemo(() => {
     const counts = new Map<string, number>()
@@ -127,7 +130,8 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
       )}
 
       <div className="flex flex-col gap-2 border-t border-line pt-4">
-        <div>
+        <div className="flex flex-wrap gap-2">
+          {canEdit && <LinkButton href={href.trash}>سلة المحذوفات{trashed > 0 ? ` (${trashed})` : ''}</LinkButton>}
           <Button kind="plain" onClick={doExport} disabled={exporting || data.recipes.length === 0}>
             نزّل نسخة من كل الوصفات (JSON)
           </Button>

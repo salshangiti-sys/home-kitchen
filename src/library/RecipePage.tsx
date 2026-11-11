@@ -6,9 +6,10 @@
 // editors), and its text is edited in OneNote; the app edits only its own fields (tags, planning).
 
 import { useCallback, useEffect, useState } from 'react'
-import { href } from '../router'
+import { href, navigate } from '../router'
 import { Badge, Button, LinkButton, Notice } from '../ui'
-import { loadRecipe, setFavorite, setFlagStatus, type LoadedRecipe } from './api'
+import { loadRecipe, restoreRecipe, setFavorite, setFlagStatus, trashRecipe, type LoadedRecipe } from './api'
+import { explain } from '../offline/readThrough'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeDoc } from './types'
 
@@ -39,6 +40,8 @@ export default function RecipePage({ id, canEdit, userId }: { id: string; canEdi
   const [loaded, setLoaded] = useState<LoadedRecipe | null | undefined>(undefined)
   const [page, setPage] = useState<PageLink | null>(null)
   const [reading, setReading] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [moving, setMoving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
@@ -77,7 +80,20 @@ export default function RecipePage({ id, canEdit, userId }: { id: string; canEdi
   if (loaded === undefined) return <p className="text-muted">جارٍ التحميل…</p>
   if (loaded === null) return <Notice>لم تُعثر على هذه الوصفة.</Notice>
 
-  const { doc, favorite, flags } = loaded
+  const { doc, favorite, flags, trashedAt } = loaded
+  const inTrash = trashedAt !== null
+  const move = async (work: () => Promise<void>, then: () => void) => {
+    setMoving(true)
+    try {
+      await work()
+      then()
+    } catch (e) {
+      setError(explain(e).message)
+    } finally {
+      setMoving(false)
+      setConfirming(false)
+    }
+  }
   const toggleFavorite = async () => {
     try {
       await setFavorite(id, userId, !favorite)
@@ -100,11 +116,35 @@ export default function RecipePage({ id, canEdit, userId }: { id: string; canEdi
           {doc.tags?.lunchbox && <Badge tone="accent">لانش بوكس</Badge>}
           {doc.tags?.custom?.map((tag) => <Badge key={tag}>{tag}</Badge>)}
         </div>
+        {inTrash && (
+          <div className="flex flex-col gap-2 rounded-2xl border border-amber-500 p-4">
+            <p className="font-medium">هذه الوصفة في سلة المحذوفات، ولا تظهر في المكتبة.</p>
+            {canEdit && (
+              <div>
+                <Button disabled={moving} onClick={() => move(() => restoreRecipe(id), load)}>
+                  استرجعي الوصفة
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <Button kind="plain" onClick={toggleFavorite}>{favorite ? '★ في المفضلة' : '☆ أضف للمفضلة'}</Button>
           {canEdit && page?.web_url && <LinkButton external kind="primary" href={page.web_url}>تعديل في OneNote ↗</LinkButton>}
-          {canEdit && <LinkButton href={href.edit(id)}>{page ? 'الوسوم والتخطيط' : 'تعديل'}</LinkButton>}
+          {canEdit && !inTrash && <LinkButton href={href.edit(id)}>{page ? 'الوسوم والتخطيط' : 'تعديل'}</LinkButton>}
+          {canEdit && !inTrash && !confirming && <Button kind="plain" onClick={() => setConfirming(true)}>نقل إلى سلة المحذوفات</Button>}
         </div>
+        {canEdit && !inTrash && confirming && (
+          <div className="flex flex-col gap-2 rounded-2xl border border-line p-4">
+            <p>تُنقل الوصفة إلى سلة المحذوفات ويمكنك استرجاعها منها في أي وقت. صفحتها في OneNote لا تتأثر.</p>
+            <div className="flex gap-2">
+              <Button kind="danger" disabled={moving} onClick={() => move(() => trashRecipe(id), () => navigate(href.library))}>
+                نعم، انقليها
+              </Button>
+              <Button kind="plain" onClick={() => setConfirming(false)}>إلغاء</Button>
+            </div>
+          </div>
+        )}
         <Facts doc={doc} />
         {page && <PageStatus page={page} reading={reading} />}
       </header>

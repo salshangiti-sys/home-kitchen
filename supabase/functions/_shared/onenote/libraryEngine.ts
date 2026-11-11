@@ -73,6 +73,8 @@ export interface LibraryStore {
   // Raises on a version conflict; origin 'onenote' for text read from a page, 'app' otherwise.
   saveRecipe(doc: RecipeDoc, expectedVersion: number | null, origin: 'app' | 'onenote'): Promise<SaveResult>
   links(): Promise<PageLink[]>
+  // Pages of recipes that are in the trash: not read or checked, but not offered for adding again.
+  trashedPageIds(): Promise<string[]>
   link(recipeId: string): Promise<PageLink | null>
   saveLink(link: PageLink): Promise<void>
   replaceUnlinked(pages: UnlinkedPage[]): Promise<void>
@@ -211,7 +213,7 @@ export async function checkLibrary(deps: LibraryDeps, refreshLimit = 10): Promis
   const listed = new Map(pages.map((page) => [page.id, page]))
 
   const links = await store.links()
-  const linkedIds = new Set(links.map((link) => link.pageId))
+  const linkedIds = new Set([...links.map((link) => link.pageId), ...(await store.trashedPageIds())])
   const missing: string[] = []
   for (const link of links) {
     if (listed.has(link.pageId)) continue

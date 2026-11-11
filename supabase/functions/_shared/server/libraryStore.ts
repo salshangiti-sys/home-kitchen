@@ -131,6 +131,18 @@ export class SupabaseLibraryStore implements LibraryStore {
     return rows.map(toLink)
   }
 
+  async trashedPageIds(): Promise<string[]> {
+    const rows = check(
+      await this.admin
+        .from('recipe_pages')
+        .select('page_id,recipes!inner(household_id,deleted_at)')
+        .eq('recipes.household_id', this.householdId)
+        .not('recipes.deleted_at', 'is', null),
+      'read trashed links',
+    ) as unknown as Array<{ page_id: string }>
+    return rows.map((row) => row.page_id)
+  }
+
   async link(recipeId: string): Promise<PageLink | null> {
     const row = check(await this.admin.from('recipe_pages').select(PAGE_COLUMNS).eq('recipe_id', recipeId).maybeSingle(), 'read link')
     return row ? toLink(row as PageRow) : null
