@@ -10,6 +10,7 @@ import { href, navigate } from '../router'
 import { Badge, Button, LinkButton, Notice } from '../ui'
 import { loadRecipe, restoreRecipe, setFavorite, setFlagStatus, trashRecipe, type LoadedRecipe } from './api'
 import { explain } from '../offline/readThrough'
+import CookHistory from '../history/CookHistory'
 import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeDoc } from './types'
@@ -37,7 +38,7 @@ function describeFlag(flag: string): string {
   return rest.length ? `${label} ${rest.join(':')}` : label
 }
 
-export default function RecipePage({ id, canEdit, userId }: { id: string; canEdit: boolean; userId: string }) {
+export default function RecipePage({ id, canEdit, userId, startLogging = false }: { id: string; canEdit: boolean; userId: string; startLogging?: boolean }) {
   const [loaded, setLoaded] = useState<LoadedRecipe | null | undefined>(undefined)
   const [page, setPage] = useState<PageLink | null>(null)
   const [reading, setReading] = useState(false)
@@ -209,6 +210,8 @@ export default function RecipePage({ id, canEdit, userId }: { id: string; canEdi
           <p dir="auto" className="whitespace-pre-line leading-relaxed">{doc.raw_text}</p>
         </Section>
       )}
+
+      <CookHistory recipeId={id} userId={userId} canLog={!inTrash} startLogging={startLogging} />
 
       {(doc.media?.length ?? 0) > 0 && (
         <p className="text-sm text-muted">في صفحة OneNote الأصلية {doc.media!.length === 1 ? 'صورة أو فيديو لم يُنقل' : `${doc.media!.length} صور أو فيديوهات لم تُنقل`}. إضافة الصور للوصفة قادمة لاحقًا.</p>

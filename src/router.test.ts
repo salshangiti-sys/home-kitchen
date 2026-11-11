@@ -12,6 +12,7 @@ describe('parseHash', () => {
     ['#/lab', { name: 'lab' }],
     ['#/trash', { name: 'trash' }],
     ['#/r/salads-007/cook', { name: 'cook', id: 'salads-007' }],
+    ['#/r/salads-007/cooked', { name: 'recipe', id: 'salads-007', logging: true }],
     ['#/onenote', { name: 'onenote' }],
     ['#/unknown', { name: 'library' }],
   ])('%s', (hash, route) => {

@@ -73,7 +73,7 @@ describe('cook mode', () => {
     expect(loadProgress('salads-007', 3)?.step).toBe(2)
 
     fireEvent.click(screen.getByRole('button', { name: 'تم الطبخ ✓' }))
-    expect(window.location.hash).toBe('#/r/salads-007')
+    expect(window.location.hash).toBe('#/r/salads-007/cooked') // the recipe page, ready to record the cooking
     expect(loadProgress('salads-007', 3)).toBeNull()
   })
 

@@ -68,7 +68,7 @@ function Cooking({ id, doc }: { id: string; doc: RecipeDoc }) {
     setProgress((p) => ({ ...p, checked: p.checked.includes(key) ? p.checked.filter((k) => k !== key) : [...p.checked, key] }))
   const finish = () => {
     clearProgress(id)
-    navigate(href.recipe(id))
+    navigate(href.cooked(id)) // the recipe page, with the "I cooked it" form open
   }
 
   // The page is right to left, so "next" is toward the left.

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 
 export type Route =
   | { name: 'library' }
-  | { name: 'recipe'; id: string }
+  | { name: 'recipe'; id: string; logging?: true } // logging: open with the "I cooked it" form
   | { name: 'edit'; id: string }
   | { name: 'cook'; id: string }
   | { name: 'new' }
@@ -18,6 +18,7 @@ export function parseHash(hash: string): Route {
   if (parts[0] === 'r' && parts[1]) {
     if (parts[2] === 'edit') return { name: 'edit', id: parts[1] }
     if (parts[2] === 'cook') return { name: 'cook', id: parts[1] }
+    if (parts[2] === 'cooked') return { name: 'recipe', id: parts[1], logging: true }
     return { name: 'recipe', id: parts[1] }
   }
   if (parts[0] === 'new') return { name: 'new' }
@@ -33,6 +34,7 @@ export const href = {
   recipe: (id: string) => `#/r/${encodeURIComponent(id)}`,
   edit: (id: string) => `#/r/${encodeURIComponent(id)}/edit`,
   cook: (id: string) => `#/r/${encodeURIComponent(id)}/cook`,
+  cooked: (id: string) => `#/r/${encodeURIComponent(id)}/cooked`,
   new: '#/new',
   import: '#/import',
   trash: '#/trash',

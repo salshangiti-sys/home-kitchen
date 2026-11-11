@@ -142,7 +142,7 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
     case 'library':
       return <LibraryPage canEdit={editor} />
     case 'recipe':
-      return <RecipePage key={route.id} id={route.id} canEdit={editor} userId={userId} />
+      return <RecipePage key={route.id} id={route.id} canEdit={editor} userId={userId} startLogging={route.logging === true} />
     case 'edit':
       return editor ? <RecipeEditor key={route.id} id={route.id} /> : <RecipePage id={route.id} canEdit={false} userId={userId} />
     case 'new':
