@@ -81,6 +81,7 @@ export default function RestorePage({ api = { restoreFromBackup } }: { api?: Api
             {summary.createdAt && <li>كُتبت: <span dir="ltr">{summary.createdAt.slice(0, 16).replace('T', ' ')} UTC</span></li>}
             <li>{summary.recipes} وصفة، و{summary.deleted} في سلة المحذوفات</li>
             <li>{summary.favorites} من المفضلة، و{summary.cookEntries} من سجل التجارب، و{summary.versions} من الإصدارات السابقة</li>
+            {summary.meals > 0 && <li>{summary.meals} من وجبات الخطة الأسبوعية</li>}
             {summary.photos > 0 && <li>{summary.photos} صورة (بياناتها فقط في الملف)</li>}
           </ul>
         )}

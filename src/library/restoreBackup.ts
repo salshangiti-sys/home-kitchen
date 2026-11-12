@@ -20,6 +20,7 @@ export interface Bundle {
   flags?: unknown[]
   onenote_pages?: unknown[]
   cook_log?: unknown[]
+  planned_meals?: unknown[]
   photos?: unknown[]
   members?: unknown[]
   [key: string]: unknown
@@ -31,6 +32,7 @@ export interface FileSummary {
   deleted: number
   favorites: number
   cookEntries: number
+  meals: number
   versions: number
   photos: number
 }
@@ -60,6 +62,7 @@ export function parseBackup(text: string): { bundle: Bundle; summary: FileSummar
       deleted: count(bundle.deleted_recipes),
       favorites: count(bundle.favorites),
       cookEntries: count(bundle.cook_log),
+      meals: count(bundle.planned_meals),
       versions: count(bundle.versions),
       photos: count(bundle.photos),
     },
@@ -77,6 +80,8 @@ export interface RestoreResult {
   links_added: number
   cook_entries_added: number
   food_groups_added: number
+  people_added: number
+  planned_meals_added: number
   entries_skipped_unknown_person: number
   photos_in_file: number
   errors: Array<{ id: string; error: string }>
@@ -102,7 +107,7 @@ export function restoreMessage(error: unknown): string {
 
 // Whether a run would add anything at all.
 export const addsAnything = (r: RestoreResult) =>
-  r.recipes_created + r.trashed_created + r.versions_added + r.favorites_added + r.flags_restored + r.links_added + r.cook_entries_added + r.food_groups_added > 0
+  r.recipes_created + r.trashed_created + r.versions_added + r.favorites_added + r.flags_restored + r.links_added + r.cook_entries_added + r.food_groups_added + r.people_added + r.planned_meals_added > 0
 
 // The lines of a report: what is added (or was added), nothing about zero counts.
 export function reportLines(r: RestoreResult): string[] {
@@ -116,5 +121,7 @@ export function reportLines(r: RestoreResult): string[] {
   add(r.flags_restored, 'من علامات المراجعة')
   add(r.links_added, 'من روابط صفحات OneNote')
   add(r.food_groups_added, 'من العناصر الغذائية')
+  add(r.people_added, 'من أفراد الأسرة')
+  add(r.planned_meals_added, 'من وجبات الخطة')
   return lines
 }

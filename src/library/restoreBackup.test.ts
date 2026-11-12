@@ -11,6 +11,7 @@ const file = (patch: Record<string, unknown> = {}) =>
     favorites: [{}, {}, {}],
     versions: [{}, {}, {}, {}],
     cook_log: [{}],
+    planned_meals: [{}, {}, {}],
     photos: [{}, {}],
     ...patch,
   })
@@ -26,6 +27,8 @@ const result = (patch: Partial<RestoreResult> = {}): RestoreResult => ({
   links_added: 0,
   cook_entries_added: 0,
   food_groups_added: 0,
+  people_added: 0,
+  planned_meals_added: 0,
   entries_skipped_unknown_person: 0,
   photos_in_file: 0,
   errors: [],
@@ -35,7 +38,7 @@ const result = (patch: Partial<RestoreResult> = {}): RestoreResult => ({
 describe('parseBackup', () => {
   it('reads a backup file and summarises what it holds', () => {
     const { summary } = parseBackup(file())
-    expect(summary).toEqual({ createdAt: '2026-11-12T02:30:04.000Z', recipes: 2, deleted: 1, favorites: 3, cookEntries: 1, versions: 4, photos: 2 })
+    expect(summary).toEqual({ createdAt: '2026-11-12T02:30:04.000Z', recipes: 2, deleted: 1, favorites: 3, cookEntries: 1, meals: 3, versions: 4, photos: 2 })
   })
 
   it('copes with a file from before cooking history or photos existed', () => {
@@ -64,7 +67,7 @@ describe('the report', () => {
   it('says nothing about what is not added, and whether anything is', () => {
     expect(addsAnything(result())).toBe(false)
     expect(reportLines(result())).toEqual([])
-    const r = result({ recipes_created: 12, trashed_created: 1, favorites_added: 5, cook_entries_added: 3, versions_added: 20, flags_restored: 2, links_added: 11, food_groups_added: 9 })
+    const r = result({ recipes_created: 12, trashed_created: 1, favorites_added: 5, cook_entries_added: 3, versions_added: 20, flags_restored: 2, links_added: 11, food_groups_added: 9, people_added: 2, planned_meals_added: 14 })
     expect(addsAnything(r)).toBe(true)
     expect(reportLines(r)).toEqual([
       '12 وصفة جديدة',
@@ -75,6 +78,8 @@ describe('the report', () => {
       '2 من علامات المراجعة',
       '11 من روابط صفحات OneNote',
       '9 من العناصر الغذائية',
+      '2 من أفراد الأسرة',
+      '14 من وجبات الخطة',
     ])
   })
 
