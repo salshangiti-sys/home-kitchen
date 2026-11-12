@@ -1,5 +1,6 @@
 // The nightly backup: build the file, write it to OneDrive, read it back and check it, and keep
-// only the newest few. Pure logic with its collaborators passed in, so it is tested without OneDrive.
+// only the newest few. Then copy the recipe photos that are not in OneDrive yet. Pure logic with its
+// collaborators passed in, so it is tested without OneDrive.
 //
 // The file is one JSON document (format "home-kitchen-backup", version 1). Its `recipes` array is
 // the same shape as recipes.json, so the app's import page can load it to restore recipes. The rest
@@ -132,6 +133,80 @@ export interface Drive {
   remove(id: string): Promise<void>
 }
 
+// ---- Photos ----
+//
+// The photo files live in Supabase storage. Each one is copied once to OneDrive (photos/<id>.jpg)
+// and checked after the copy (the size, and OneDrive's SHA-1 when it gives one). A photo already
+// there is not copied again, and nothing is ever deleted from the photos folder. A run copies at
+// most MAX_PHOTOS_PER_RUN photos and stops starting new ones after PHOTO_BUDGET_MS, so a big first
+// copy is spread over several nights and never runs the function out of time.
+
+export const MAX_PHOTOS_PER_RUN = 40
+export const PHOTO_BUDGET_MS = 90_000
+
+export interface PhotoFile {
+  id: string
+  path: string // in Supabase storage
+  bytes: number
+}
+
+export interface PhotoDrive {
+  // The names (photos/<name>) already in OneDrive; none if the folder does not exist yet.
+  photoNames(): Promise<Set<string>>
+  putPhoto(name: string, bytes: Uint8Array): Promise<{ size: number; sha1: string | null }>
+}
+
+export interface PhotoDeps {
+  list(): Promise<PhotoFile[]>
+  read(path: string): Promise<Uint8Array>
+  drive: PhotoDrive
+  now(): number
+  maxPerRun?: number
+  budgetMs?: number
+}
+
+export interface PhotoResult {
+  total: number // photos in the app
+  copied: number // copied by this run
+  pending: number // still not in OneDrive after this run
+  error: string | null
+}
+
+export const photoName = (id: string) => `${id}.jpg`
+
+export async function sha1Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-1', bytes as unknown as BufferSource)
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Copies the photos that are missing. Never throws: a problem stops the copying and is reported.
+export async function copyPhotos(deps: PhotoDeps): Promise<PhotoResult> {
+  const result: PhotoResult = { total: 0, copied: 0, pending: 0, error: null }
+  try {
+    const photos = await deps.list()
+    result.total = photos.length
+    const there = await deps.drive.photoNames()
+    const missing = photos.filter((photo) => !there.has(photoName(photo.id)))
+    result.pending = missing.length
+
+    const started = deps.now()
+    const limit = deps.maxPerRun ?? MAX_PHOTOS_PER_RUN
+    const budget = deps.budgetMs ?? PHOTO_BUDGET_MS
+    for (const photo of missing) {
+      if (result.copied >= limit || deps.now() - started > budget) break
+      const bytes = await deps.read(photo.path)
+      const stored = await deps.drive.putPhoto(photoName(photo.id), bytes)
+      if (stored.size !== bytes.length) throw new Error(`photo ${photo.id}: OneDrive stored ${stored.size} bytes, expected ${bytes.length}`)
+      if (stored.sha1 && stored.sha1.toLowerCase() !== (await sha1Hex(bytes))) throw new Error(`photo ${photo.id}: OneDrive's copy does not match the original`)
+      result.copied += 1
+      result.pending -= 1
+    }
+  } catch (error) {
+    result.error = describe(error)
+  }
+  return result
+}
+
 export interface RunRecord {
   ok: boolean
   file_name: string | null
@@ -143,13 +218,20 @@ export interface RunRecord {
   verified: boolean
   old_files_removed: number
   error: string | null
+  // The photo copy of this run (a problem here does not make the data backup fail).
+  photos_total: number | null
+  photos_copied: number | null
+  photos_pending: number | null
+  photos_error: string | null
 }
 
 export interface BackupDeps {
   bundle(): Promise<Bundle>
-  drive: Drive
+  drive: Drive & Partial<PhotoDrive>
   check: RecipeCheck
   now(): Date
+  // How to list and read the photos. They are copied through `drive` when it can hold photos.
+  photos?: Omit<PhotoDeps, 'now' | 'drive'>
 }
 
 // One backup. Never throws: a failure is returned in the record, with whatever was done before it.
@@ -165,6 +247,10 @@ export async function runBackup(deps: BackupDeps): Promise<RunRecord> {
     verified: false,
     old_files_removed: 0,
     error: null,
+    photos_total: null,
+    photos_copied: null,
+    photos_pending: null,
+    photos_error: null,
   }
   try {
     const file = await buildBackupFile(await deps.bundle(), deps.now())
@@ -192,6 +278,13 @@ export async function runBackup(deps: BackupDeps): Promise<RunRecord> {
       }
     } catch (error) {
       record.error = `The backup is good, but removing old files failed: ${(error as Error).message}`
+    }
+
+    // The photos come after the data is safe, and cannot undo it.
+    const { photoNames, putPhoto } = deps.drive
+    if (deps.photos && photoNames && putPhoto) {
+      const photos = await copyPhotos({ ...deps.photos, drive: { photoNames: () => photoNames.call(deps.drive), putPhoto: (n, b) => putPhoto.call(deps.drive, n, b) }, now: () => Date.now() })
+      Object.assign(record, { photos_total: photos.total, photos_copied: photos.copied, photos_pending: photos.pending, photos_error: photos.error })
     }
   } catch (error) {
     record.error = describe(error)

@@ -6,14 +6,21 @@ import { LINK_ONLY, SALAD } from '../../../../src/library/fixtures'
 import { OneNoteClient } from '../onenote/graph.ts'
 import {
   KEEP_BACKUPS,
+  MAX_PHOTOS_PER_RUN,
   backupName,
   buildBackupFile,
+  copyPhotos,
   filesToRemove,
   isBackupName,
+  photoName,
   runBackup,
+  sha1Hex,
   type Bundle,
   type Drive,
   type DriveFile,
+  type PhotoDeps,
+  type PhotoDrive,
+  type PhotoFile,
 } from './backup.ts'
 import { DRIVE_BASE, oneDrive } from './drive.ts'
 import { recipeChecker } from './recipeCheck.ts'
@@ -207,5 +214,212 @@ describe('the OneDrive app folder', () => {
       'GET /special/approot/children?$skiptoken=2',
       'DELETE /items/b',
     ])
+  })
+})
+
+// ---- Photos ----
+
+const bytesOf = (text: string) => new TextEncoder().encode(text)
+
+class FakePhotoDrive extends FakeDrive implements PhotoDrive {
+  photos = new Map<string, Uint8Array>()
+  fail: string | null = null
+  wrongSize = false
+  wrongHash = false
+  async photoNames() {
+    return new Set(this.photos.keys())
+  }
+  async putPhoto(name: string, data: Uint8Array): Promise<{ size: number; sha1: string | null }> {
+    if (this.fail === name) throw new Error('OneDrive is full')
+    this.photos.set(name, data)
+    this.log.push(`photo ${name}`)
+    return { size: this.wrongSize ? data.length + 1 : data.length, sha1: this.wrongHash ? 'ab'.repeat(20) : await sha1Hex(data) }
+  }
+}
+
+const photo = (n: number): PhotoFile => ({ id: `p${n}`, path: `h/r/p${n}.jpg`, bytes: 5 })
+const storage = (files: PhotoFile[]) => ({
+  list: async () => files,
+  read: async (path: string) => bytesOf(`bytes of ${path}`),
+})
+
+function copy(drive: FakePhotoDrive, files: PhotoFile[], extra: Partial<PhotoDeps> = {}) {
+  return copyPhotos({ ...storage(files), drive, now: () => 0, ...extra })
+}
+
+describe('copying photos to OneDrive', () => {
+  it('copies the photos that are not there yet, under photos/<id>.jpg names, once', async () => {
+    const drive = new FakePhotoDrive()
+    drive.photos.set(photoName('p1'), bytesOf('already there'))
+    const result = await copy(drive, [photo(1), photo(2), photo(3)])
+    expect(result).toEqual({ total: 3, copied: 2, pending: 0, error: null })
+    expect([...drive.photos.keys()].sort()).toEqual(['p1.jpg', 'p2.jpg', 'p3.jpg'])
+    expect(new TextDecoder().decode(drive.photos.get('p1.jpg'))).toBe('already there') // not copied again
+    expect(await copy(drive, [photo(1), photo(2), photo(3)])).toEqual({ total: 3, copied: 0, pending: 0, error: null })
+  })
+
+  it('has nothing to do for no photos', async () => {
+    expect(await copy(new FakePhotoDrive(), [])).toEqual({ total: 0, copied: 0, pending: 0, error: null })
+  })
+
+  it('spreads a big first copy over several runs', async () => {
+    const drive = new FakePhotoDrive()
+    const files = Array.from({ length: MAX_PHOTOS_PER_RUN + 10 }, (_, i) => photo(i))
+    expect(await copy(drive, files)).toMatchObject({ total: 50, copied: 40, pending: 10, error: null })
+    expect(await copy(drive, files)).toMatchObject({ copied: 10, pending: 0 })
+    expect(drive.photos.size).toBe(50)
+  })
+
+  it('stops starting new copies when the time is used up', async () => {
+    const drive = new FakePhotoDrive()
+    let t = 0
+    const result = await copy(drive, [photo(1), photo(2), photo(3)], { now: () => (t += 40_000), budgetMs: 100_000 })
+    expect(result.copied).toBe(2)
+    expect(result.pending).toBe(1)
+    expect(result.error).toBeNull()
+  })
+
+  it('stops at the first problem, keeps what was copied, and says what went wrong', async () => {
+    const drive = new FakePhotoDrive()
+    drive.fail = 'p2.jpg'
+    const result = await copy(drive, [photo(1), photo(2), photo(3)])
+    expect(result).toEqual({ total: 3, copied: 1, pending: 2, error: 'OneDrive is full' })
+    expect(drive.photos.has('p3.jpg')).toBe(false)
+  })
+
+  it('does not count a copy whose size or content differs from the original', async () => {
+    const drive = new FakePhotoDrive()
+    drive.wrongSize = true
+    expect((await copy(drive, [photo(1)])).error).toMatch(/stored 20 bytes, expected 19/)
+    drive.wrongSize = false
+    drive.wrongHash = true
+    const result = await copy(drive, [photo(2)])
+    expect(result.error).toMatch(/does not match the original/)
+    expect(result.copied).toBe(0)
+  })
+
+  it('accepts a copy when OneDrive gives no hash but the size is right', async () => {
+    const drive = new FakePhotoDrive()
+    drive.putPhoto = (async (name: string, data: Uint8Array) => (drive.photos.set(name, data), { size: data.length, sha1: null })) as never
+    expect(await copy(drive, [photo(1)])).toMatchObject({ copied: 1, error: null })
+  })
+
+  it('reports a problem with storage or the list instead of throwing', async () => {
+    const result = await copyPhotos({ list: async () => { throw new Error('could not list') }, read: async () => bytesOf('x'), drive: new FakePhotoDrive(), now: () => 0 })
+    expect(result).toMatchObject({ copied: 0, error: 'could not list' })
+  })
+})
+
+describe('photos in a backup run', () => {
+  const withPhotos = (drive: FakePhotoDrive, files: PhotoFile[]) =>
+    runBackup({ bundle: async () => bundle(), drive, check, now: () => NOW, photos: storage(files) })
+
+  it('copies the photos after the data is safe and records how it went', async () => {
+    const drive = new FakePhotoDrive()
+    const record = await withPhotos(drive, [photo(1), photo(2)])
+    expect(record).toMatchObject({ ok: true, verified: true, photos_total: 2, photos_copied: 2, photos_pending: 0, photos_error: null })
+    expect(drive.log.indexOf('put hk-backup-2026-11-11-0230.json')).toBeLessThan(drive.log.indexOf('photo p1.jpg'))
+  })
+
+  it('stays a good backup when a photo cannot be copied, and shows the problem', async () => {
+    const drive = new FakePhotoDrive()
+    drive.fail = 'p1.jpg'
+    const record = await withPhotos(drive, [photo(1)])
+    expect(record).toMatchObject({ ok: true, verified: true, error: null, photos_copied: 0, photos_pending: 1, photos_error: 'OneDrive is full' })
+  })
+
+  it('does not touch photos when the data backup failed', async () => {
+    const drive = new FakePhotoDrive()
+    drive.failOn = 'put'
+    const record = await withPhotos(drive, [photo(1)])
+    expect(record).toMatchObject({ ok: false, photos_total: null })
+    expect(drive.photos.size).toBe(0)
+  })
+
+  it('leaves the photo fields empty when no photos are offered, or the drive cannot hold them', async () => {
+    expect(await run(new FakeDrive())).toMatchObject({ photos_total: null, photos_copied: null })
+    const record = await runBackup({ bundle: async () => bundle(), drive: new FakeDrive(), check, now: () => NOW, photos: storage([photo(1)]) })
+    expect(record.photos_total).toBeNull()
+  })
+})
+
+describe('the OneDrive photo folder', () => {
+  const sent: Array<{ method: string; url: string; body?: unknown; type?: string }> = []
+  const drive = (responses: Response[]) => {
+    sent.length = 0
+    const client = new OneNoteClient({
+      baseUrl: DRIVE_BASE,
+      getAccessToken: async () => 't',
+      fetch: (async (url: string, init: { method: string; body?: unknown; headers: Record<string, string> }) => {
+        sent.push({ method: init.method, url, body: init.body, type: init.headers['Content-Type'] })
+        return responses.shift()!
+      }) as never,
+      sleep: async () => {},
+    })
+    return oneDrive(client)
+  }
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
+
+  it('uploads the bytes to photos/<name> as image/jpeg and returns the size and SHA-1', async () => {
+    const d = drive([json({ size: 3, file: { hashes: { sha1Hash: 'ABC' } } }, 201)])
+    expect(await d.putPhoto('p1.jpg', new Uint8Array([1, 2, 3]))).toEqual({ size: 3, sha1: 'ABC' })
+    expect(sent[0]).toMatchObject({ method: 'PUT', url: `${DRIVE_BASE}/special/approot:/photos/p1.jpg:/content`, type: 'image/jpeg' })
+    expect(sent[0].body).toEqual(new Uint8Array([1, 2, 3]))
+  })
+
+  it('returns no hash when OneDrive gives none', async () => {
+    expect(await drive([json({ size: 3 })]).putPhoto('p1.jpg', new Uint8Array(3))).toEqual({ size: 3, sha1: null })
+  })
+
+  it('lists every page of names, and treats a missing folder as empty', async () => {
+    const d = drive([
+      json({ value: [{ name: 'a.jpg' }], '@odata.nextLink': `${DRIVE_BASE}/special/approot:/photos:/children?$skiptoken=2` }),
+      json({ value: [{ name: 'b.jpg' }] }),
+    ])
+    expect([...(await d.photoNames())]).toEqual(['a.jpg', 'b.jpg'])
+    expect(sent[0].url).toBe(`${DRIVE_BASE}/special/approot:/photos:/children?$select=name&$top=200`)
+    expect(await drive([json({ error: { code: 'itemNotFound' } }, 404)]).photoNames()).toEqual(new Set())
+  })
+
+  it('does not hide other errors', async () => {
+    await expect(drive([json({}, 403)]).photoNames()).rejects.toThrow(/403/)
+  })
+})
+
+describe('reading the backup file back from OneDrive', () => {
+  const responses = (list: Response[]) => {
+    const waits: number[] = []
+    let calls = 0
+    const client = new OneNoteClient({
+      baseUrl: DRIVE_BASE,
+      getAccessToken: async () => 't',
+      fetch: (async () => (calls++, list.shift()!)) as never,
+      sleep: async () => {},
+    })
+    return { d: oneDrive(client, async (ms) => void waits.push(ms)), waits, calls: () => calls }
+  }
+  const failure = (status: number) => new Response('<html>An unexpected error has occurred.</html>', { status })
+
+  it('tries again after a passing 401 from the download servers, and then succeeds', async () => {
+    const { d, waits } = responses([failure(401), failure(401), failure(401), failure(401), new Response('{"ok":1}')]) // each try spends two 401s: the client renews the token once
+    expect(new TextDecoder().decode(await d.get('f.json'))).toBe('{"ok":1}')
+    expect(waits).toEqual([2000, 5000])
+  })
+
+  it('tries again when the file is not there yet', async () => {
+    const { d } = responses([failure(404), new Response('x')])
+    expect(new TextDecoder().decode(await d.get('f.json'))).toBe('x')
+  })
+
+  it('gives up after three tries, with the last error', async () => {
+    const { d, waits } = responses([failure(401), failure(401), failure(401), failure(401), failure(401), failure(401), failure(401), failure(401)])
+    await expect(d.get('f.json')).rejects.toThrow(/401/)
+    expect(waits).toEqual([2000, 5000])
+  })
+
+  it('does not retry a real mistake', async () => {
+    const { d, waits } = responses([failure(400)])
+    await expect(d.get('f.json')).rejects.toThrow(/400/)
+    expect(waits).toEqual([])
   })
 })

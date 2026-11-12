@@ -110,7 +110,7 @@ export class OneNoteClient {
     this.maxAttempts = deps.maxAttempts ?? 4
   }
 
-  async request(method: string, path: string, init: { body?: string; contentType?: string } = {}): Promise<Response> {
+  async request(method: string, path: string, init: { body?: string | Uint8Array; contentType?: string } = {}): Promise<Response> {
     let refreshed = false
     for (let attempt = 0; ; attempt++) {
       const token = await this.deps.getAccessToken(refreshed)
@@ -122,7 +122,7 @@ export class OneNoteClient {
             Authorization: `Bearer ${token}`,
             ...(init.contentType ? { 'Content-Type': init.contentType } : {}),
           },
-          body: init.body,
+          body: init.body as BodyInit | undefined,
         })
       } catch (error) {
         if (attempt + 1 >= this.maxAttempts) {

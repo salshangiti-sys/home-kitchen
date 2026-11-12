@@ -18,6 +18,10 @@ export interface BackupRun {
   deleted_recipes: number | null
   old_files_removed: number
   error: string | null
+  photos_total: number | null
+  photos_copied: number | null
+  photos_pending: number | null
+  photos_error: string | null
 }
 
 // The nightly run is at 02:30 UTC; a day and a half without a good one means something is wrong.
@@ -26,7 +30,7 @@ export const STALE_AFTER_MS = 36 * 60 * 60 * 1000
 export async function loadBackupRuns(limit = 10): Promise<BackupRun[]> {
   const { data, error } = await supabase
     .from('backup_runs')
-    .select('id,trigger,started_at,finished_at,ok,verified,file_name,folder_name,bytes,recipes,deleted_recipes,old_files_removed,error')
+    .select('id,trigger,started_at,finished_at,ok,verified,file_name,folder_name,bytes,recipes,deleted_recipes,old_files_removed,error,photos_total,photos_copied,photos_pending,photos_error')
     .order('started_at', { ascending: false })
     .limit(limit)
   if (error) throw new Error(error.message)
@@ -58,6 +62,17 @@ export function backupState(runs: BackupRun[], now = Date.now()): BackupState {
   if (!newest.ok || !newest.verified) return { kind: 'failing', run: newest, lastGood }
   if (now - Date.parse(newest.started_at) > STALE_AFTER_MS) return { kind: 'stale', run: newest }
   return { kind: 'ok', run: newest }
+}
+
+// The photo line of a run: how many photos are safe in OneDrive, and whether copying hit a problem.
+// Nothing to say when the app has no photos (or the run did not look at them).
+export function photoLine(run: BackupRun): { text: string; warn: boolean } | null {
+  if (run.photos_total == null || (run.photos_total === 0 && !run.photos_error)) return null
+  const safe = run.photos_total - (run.photos_pending ?? 0)
+  const base = `الصور: ${safe} من ${run.photos_total} محفوظة في OneDrive`
+  if (run.photos_error) return { text: `${base}. تعذّر نسخ بعضها: ${run.photos_error}`, warn: true }
+  if ((run.photos_pending ?? 0) > 0) return { text: `${base}. الباقي يُنسخ في الليالي القادمة (حتى 40 صورة في الليلة).`, warn: false }
+  return { text: `${base} ✓`, warn: false }
 }
 
 export const needsAttention = (state: BackupState) => state.kind === 'failing' || state.kind === 'stale'

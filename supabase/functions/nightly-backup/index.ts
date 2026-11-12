@@ -8,7 +8,7 @@ import AjvModule from 'ajv/dist/2020'
 import { HttpError, adminClient, corsHeaders, json, oauthConfig, requireUser } from '../_shared/server/http.ts'
 import { accessTokenProvider } from '../_shared/server/tokens.ts'
 import { OneNoteClient } from '../_shared/onenote/graph.ts'
-import { MANUAL_MIN_GAP_MS, runBackup, type Bundle } from '../_shared/backup/backup.ts'
+import { MANUAL_MIN_GAP_MS, runBackup, type Bundle, type PhotoFile } from '../_shared/backup/backup.ts'
 import { DRIVE_BASE, oneDrive } from '../_shared/backup/drive.ts'
 import { recipeChecker } from '../_shared/backup/recipeCheck.ts'
 
@@ -32,6 +32,19 @@ async function backUp(admin: ReturnType<typeof adminClient>, householdId: string
         drive: oneDrive(new OneNoteClient({ baseUrl: DRIVE_BASE, getAccessToken: accessTokenProvider(admin, userId, oauthConfig()) })),
         check,
         now: () => new Date(),
+        photos: {
+          // Photos that are still shown in the app (a removed photo is not copied again).
+          list: async () => {
+            const { data, error } = await admin.from('recipe_photos').select('id,path,bytes').eq('household_id', householdId).is('deleted_at', null).order('created_at')
+            if (error) throw new Error(`could not list the photos: ${error.message}`)
+            return data as PhotoFile[]
+          },
+          read: async (path) => {
+            const { data, error } = await admin.storage.from('recipe-photos').download(path)
+            if (error || !data) throw new Error(`could not read a photo from storage: ${error?.message ?? 'empty'}`)
+            return new Uint8Array(await data.arrayBuffer())
+          },
+        },
       })
     : { ok: false, verified: false, old_files_removed: 0, file_name: null, error: 'Microsoft account is not connected: sign in again from the OneNote page' }
 

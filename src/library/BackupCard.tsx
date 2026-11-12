@@ -4,16 +4,20 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button, Card, Notice } from '../ui'
 import { explain } from '../offline/readThrough'
-import { backUpNow, backupState, formatBytes, loadBackupRuns, type BackupRun } from './backupStatus'
+import { backUpNow, backupState, formatBytes, loadBackupRuns, photoLine, type BackupRun } from './backupStatus'
 import { timeAgo } from './onenote'
 
 function Summary({ run }: { run: BackupRun }) {
   const recipes = `${run.recipes ?? 0} وصفة${run.deleted_recipes ? ` (و${run.deleted_recipes} محذوفة)` : ''}`
   const where = run.folder_name ? `OneDrive › Apps › ${run.folder_name}` : 'OneDrive'
+  const photos = photoLine(run)
   return (
-    <p className="text-sm text-muted">
-      {recipes} · {formatBytes(run.bytes)} · <span dir="ltr">{where}</span>
-    </p>
+    <>
+      <p className="text-sm text-muted">
+        {recipes} · {formatBytes(run.bytes)} · <span dir="ltr">{where}</span>
+      </p>
+      {photos && <p className={`text-sm ${photos.warn ? 'text-amber-700 dark:text-amber-400' : 'text-muted'}`}>{photos.text}</p>}
+    </>
   )
 }
 
@@ -47,7 +51,7 @@ export default function BackupCard() {
     <Card title="النسخ الاحتياطي">
       <div className="flex flex-col gap-3">
         <p className="text-sm leading-relaxed text-muted">
-          كل ليلة (الخامسة والنصف فجرًا بتوقيت جدة) يُحفظ في OneDrive ملف فيه وصفاتك ووسومك ومفضلتك وسجل التعديلات. يُقرأ الملف بعدها من OneDrive ويُفحص: مطابق تمامًا لما كُتب، وكل وصفة فيه سليمة. يُحتفظ بآخر 30 نسخة، وما قبلها يذهب إلى سلة OneDrive.
+          كل ليلة (الخامسة والنصف فجرًا بتوقيت جدة) يُحفظ في OneDrive ملف فيه وصفاتك ووسومك ومفضلتك وسجل التعديلات. يُقرأ الملف بعدها من OneDrive ويُفحص: مطابق تمامًا لما كُتب، وكل وصفة فيه سليمة. يُحتفظ بآخر 30 نسخة، وما قبلها يذهب إلى سلة OneDrive. وصور الوصفات تُنسخ إلى مجلد «photos» بجانبها (مرة واحدة لكل صورة، ولا يُحذف منه شيء).
         </p>
 
         {state?.kind === 'ok' && (
