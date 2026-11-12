@@ -13,6 +13,7 @@ const result = (dry: boolean, patch: Partial<RestoreResult> = {}): RestoreResult
   flags_restored: 1,
   links_added: 1,
   cook_entries_added: 3,
+  food_groups_added: 0,
   entries_skipped_unknown_person: 0,
   photos_in_file: 0,
   errors: [],
@@ -68,7 +69,7 @@ describe('restoring from a backup file', () => {
   })
 
   it('offers no restore when nothing is missing', async () => {
-    show(vi.fn(async (_b: unknown, dry: boolean) => result(dry, { recipes_created: 0, trashed_created: 0, versions_added: 0, favorites_added: 0, flags_restored: 0, links_added: 0, cook_entries_added: 0, recipes_existing: 5 })))
+    show(vi.fn(async (_b: unknown, dry: boolean) => result(dry, { recipes_created: 0, trashed_created: 0, versions_added: 0, favorites_added: 0, flags_restored: 0, links_added: 0, cook_entries_added: 0, food_groups_added: 0, recipes_existing: 5 })))
     choose(backup)
     fireEvent.click(await screen.findByRole('button', { name: 'شغّلي تجربة' }))
     expect(await screen.findByText(/لا شيء ناقص/)).toBeTruthy()

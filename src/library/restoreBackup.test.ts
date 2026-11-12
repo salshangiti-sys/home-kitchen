@@ -25,6 +25,7 @@ const result = (patch: Partial<RestoreResult> = {}): RestoreResult => ({
   flags_restored: 0,
   links_added: 0,
   cook_entries_added: 0,
+  food_groups_added: 0,
   entries_skipped_unknown_person: 0,
   photos_in_file: 0,
   errors: [],
@@ -63,7 +64,7 @@ describe('the report', () => {
   it('says nothing about what is not added, and whether anything is', () => {
     expect(addsAnything(result())).toBe(false)
     expect(reportLines(result())).toEqual([])
-    const r = result({ recipes_created: 12, trashed_created: 1, favorites_added: 5, cook_entries_added: 3, versions_added: 20, flags_restored: 2, links_added: 11 })
+    const r = result({ recipes_created: 12, trashed_created: 1, favorites_added: 5, cook_entries_added: 3, versions_added: 20, flags_restored: 2, links_added: 11, food_groups_added: 9 })
     expect(addsAnything(r)).toBe(true)
     expect(reportLines(r)).toEqual([
       '12 وصفة جديدة',
@@ -73,6 +74,7 @@ describe('the report', () => {
       '20 من الإصدارات السابقة',
       '2 من علامات المراجعة',
       '11 من روابط صفحات OneNote',
+      '9 من العناصر الغذائية',
     ])
   })
 

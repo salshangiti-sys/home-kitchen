@@ -76,6 +76,7 @@ export interface RestoreResult {
   flags_restored: number
   links_added: number
   cook_entries_added: number
+  food_groups_added: number
   entries_skipped_unknown_person: number
   photos_in_file: number
   errors: Array<{ id: string; error: string }>
@@ -101,7 +102,7 @@ export function restoreMessage(error: unknown): string {
 
 // Whether a run would add anything at all.
 export const addsAnything = (r: RestoreResult) =>
-  r.recipes_created + r.trashed_created + r.versions_added + r.favorites_added + r.flags_restored + r.links_added + r.cook_entries_added > 0
+  r.recipes_created + r.trashed_created + r.versions_added + r.favorites_added + r.flags_restored + r.links_added + r.cook_entries_added + r.food_groups_added > 0
 
 // The lines of a report: what is added (or was added), nothing about zero counts.
 export function reportLines(r: RestoreResult): string[] {
@@ -114,5 +115,6 @@ export function reportLines(r: RestoreResult): string[] {
   add(r.versions_added, 'من الإصدارات السابقة')
   add(r.flags_restored, 'من علامات المراجعة')
   add(r.links_added, 'من روابط صفحات OneNote')
+  add(r.food_groups_added, 'من العناصر الغذائية')
   return lines
 }
