@@ -9,7 +9,6 @@ describe('parseHash', () => {
     ['#/r/salads-007/edit', { name: 'edit', id: 'salads-007' }],
     ['#/new', { name: 'new' }],
     ['#/import', { name: 'import' }],
-    ['#/lab', { name: 'lab' }],
     ['#/trash', { name: 'trash' }],
     ['#/r/salads-007/cook', { name: 'cook', id: 'salads-007' }],
     ['#/r/salads-007/cooked', { name: 'recipe', id: 'salads-007', logging: true }],

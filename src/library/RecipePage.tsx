@@ -14,6 +14,7 @@ import CookHistory from '../history/CookHistory'
 import VersionHistory from '../history/VersionHistory'
 import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
+import { safeHref } from './safeUrl'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeDoc } from './types'
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -301,10 +302,18 @@ function Facts({ doc }: { doc: RecipeDoc }) {
 }
 
 function SourceLink({ source }: { source: RecipeDoc['sources'][number] }) {
-  return (
-    <a href={source.url} target="_blank" rel="noreferrer" className="inline-flex flex-wrap items-center gap-2 text-accent underline">
+  const link = safeHref(source.url)
+  const content = (
+    <>
       {source.platform && <Badge>{PLATFORM_LABELS[source.platform] ?? source.platform}</Badge>}
       <span dir="auto" className="break-all">{source.label || source.url}</span>
+    </>
+  )
+  // An address that is not a web address is shown, not linked.
+  if (!link) return <span className="inline-flex flex-wrap items-center gap-2">{content}</span>
+  return (
+    <a href={link} target="_blank" rel="noreferrer" className="inline-flex flex-wrap items-center gap-2 text-accent underline">
+      {content}
     </a>
   )
 }
@@ -313,12 +322,17 @@ function LinkOnly({ doc }: { doc: RecipeDoc }) {
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
       <p className="text-muted">وصفة محفوظة كرابط فقط. افتح الرابط لمشاهدتها:</p>
-      {doc.sources.map((source, i) => (
-        <a key={i} href={source.url} target="_blank" rel="noreferrer" className="flex min-h-12 items-center justify-between gap-3 rounded-xl bg-accent px-4 text-on-accent">
-          <span dir="auto" className="truncate">{source.label || source.url}</span>
-          <span className="shrink-0">{PLATFORM_LABELS[source.platform ?? 'other']} ↗</span>
-        </a>
-      ))}
+      {doc.sources.map((source, i) => {
+        const link = safeHref(source.url)
+        return link ? (
+          <a key={i} href={link} target="_blank" rel="noreferrer" className="flex min-h-12 items-center justify-between gap-3 rounded-xl bg-accent px-4 text-on-accent">
+            <span dir="auto" className="truncate">{source.label || source.url}</span>
+            <span className="shrink-0">{PLATFORM_LABELS[source.platform ?? 'other']} ↗</span>
+          </a>
+        ) : (
+          <p key={i} dir="auto" className="break-all rounded-xl border border-line px-4 py-3">{source.label || source.url}</p>
+        )
+      })}
     </section>
   )
 }

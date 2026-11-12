@@ -12,7 +12,6 @@ import TrashPage from './library/TrashPage'
 import RecipeEditor from './library/RecipeEditor'
 import RecipePage from './library/RecipePage'
 import { href, useRoute, type Route } from './router'
-import SyncLab from './spike/SyncLab'
 import { applyTheme, loadPreference, resolveTheme, savePreference, type ThemePreference } from './theme'
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
@@ -21,8 +20,8 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'dark', label: 'داكن' },
 ]
 
-// The Microsoft sign-in returns to /?ms=… (the lab) or /?ms=…#/onenote (the OneNote page).
-if (new URLSearchParams(window.location.search).has('ms') && !window.location.hash) window.location.hash = href.lab
+// The Microsoft sign-in returns to /?ms=…#/onenote (the OneNote page); without a page, go there.
+if (new URLSearchParams(window.location.search).has('ms') && !window.location.hash) window.location.hash = href.onenote
 
 function useThemePreference() {
   const [pref, setPref] = useState<ThemePreference>(loadPreference)
@@ -68,7 +67,7 @@ const NAV: Array<{ label: string; to: string; match: Route['name'][]; editorsOnl
   { label: 'الوصفات', to: href.library, match: ['library', 'recipe'] },
   { label: 'وصفة جديدة', to: href.new, match: ['new'], editorsOnly: true },
   { label: 'استيراد', to: href.import, match: ['import'], editorsOnly: true },
-  { label: 'OneNote', to: href.onenote, match: ['onenote', 'lab'], editorsOnly: true },
+  { label: 'OneNote', to: href.onenote, match: ['onenote'], editorsOnly: true },
 ]
 
 export default function App() {
@@ -155,17 +154,5 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return editor ? <TrashPage /> : <LibraryPage canEdit={false} />
     case 'onenote':
       return editor ? <OneNotePage /> : <LibraryPage canEdit={false} />
-    case 'lab':
-      return (
-        <>
-          <section className="rounded-2xl border border-line bg-surface p-5">
-            <h2 className="mb-2 text-lg font-semibold">مختبر مزامنة OneNote (المرحلة 0)</h2>
-            <p className="leading-relaxed text-muted">
-              أداة اختبار للمزامنة مع الدفتر التجريبي فقط. وصفاته منفصلة عن مكتبة الوصفات، ولا يقرأ ولا يكتب في دفتر الوصفات الحقيقي.
-            </p>
-          </section>
-          <SyncLab />
-        </>
-      )
   }
 }

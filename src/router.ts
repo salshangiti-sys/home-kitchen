@@ -11,7 +11,6 @@ export type Route =
   | { name: 'import' }
   | { name: 'trash' }
   | { name: 'onenote' }
-  | { name: 'lab' }
 
 export function parseHash(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent)
@@ -25,7 +24,6 @@ export function parseHash(hash: string): Route {
   if (parts[0] === 'import') return { name: 'import' }
   if (parts[0] === 'trash') return { name: 'trash' }
   if (parts[0] === 'onenote') return { name: 'onenote' }
-  if (parts[0] === 'lab') return { name: 'lab' }
   return { name: 'library' }
 }
 
@@ -39,7 +37,6 @@ export const href = {
   import: '#/import',
   trash: '#/trash',
   onenote: '#/onenote',
-  lab: '#/lab',
 }
 
 // The app's own address, including the folder it is served from (e.g. /home-kitchen/ on GitHub

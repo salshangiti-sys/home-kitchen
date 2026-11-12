@@ -228,10 +228,6 @@ export default function OneNotePage() {
           </ul>
         </Card>
       )}
-
-      <p className="text-sm text-muted">
-        <a href={href.lab} className="underline">مختبر المزامنة (المرحلة 0)</a> للتجارب على الدفتر التجريبي فقط.
-      </p>
     </div>
   )
 }
