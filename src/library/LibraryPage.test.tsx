@@ -26,6 +26,12 @@ vi.mock('./api', async (importOriginal) => ({
   exportRecipes: async () => [],
 }))
 vi.mock('../photos/api', () => ({ coverThumbs: async () => new Map() }))
+let cookStats = new Map<string, { count: number; lastOn: string }>()
+vi.mock('../history/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../history/api')>()),
+  listCookStats: async () => cookStats,
+  localDate: () => '2026-11-12',
+}))
 vi.mock('./bulkTag', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./bulkTag')>()),
   bulkTag: (...args: unknown[]) => bulkTag(...args),
@@ -39,6 +45,7 @@ beforeEach(() => {
     recipe('salads-002', 'سلطة فواكه', 'سلطات'),
     recipe('soups-001', 'شوربة عدس', 'شوربات', { lunchbox: true }),
   ]
+  cookStats = new Map()
   bulkTag.mockReset()
   bulkTag.mockImplementation(async (ids: string[], _changes: unknown, dry: boolean) => ({ changed: ids.length, unchanged: 0, skipped: 0, dry_run: dry }))
   listRecipes.mockClear()
@@ -109,5 +116,46 @@ describe('tagging many recipes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'تم' }))
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
     expect(screen.getByRole('button', { name: 'توسيم عدة وصفات' })).toBeTruthy()
+  })
+})
+
+describe('using the cooking history', () => {
+  const titles = () => screen.getAllByRole('link').map((a) => a.textContent ?? '').filter((t) => /سلطة|شوربة/.test(t))
+
+  it('shows no sorting or filter while nothing was ever cooked', async () => {
+    render(<LibraryPage canEdit />)
+    await screen.findByText('سلطة خضراء')
+    expect(screen.queryByLabelText('الترتيب')).toBeNull()
+    expect(screen.queryByRole('button', { name: /لم تُجرَّب بعد/ })).toBeNull()
+  })
+
+  it('says under a recipe how often and when it was cooked', async () => {
+    cookStats = new Map([['salads-001', { count: 3, lastOn: '2026-11-07' }]])
+    render(<LibraryPage canEdit />)
+    expect(await screen.findByText('طُبخت 3 مرات · آخر مرة قبل 5 أيام')).toBeTruthy()
+    expect(screen.getAllByText(/طُبخت/)).toHaveLength(1)
+  })
+
+  it('sorts by the most cooked and by the longest since cooked', async () => {
+    cookStats = new Map([
+      ['salads-002', { count: 4, lastOn: '2026-11-10' }],
+      ['soups-001', { count: 1, lastOn: '2026-02-01' }],
+    ])
+    render(<LibraryPage canEdit />)
+    await screen.findByText('سلطة خضراء')
+    fireEvent.change(await screen.findByLabelText('الترتيب'), { target: { value: 'most' } })
+    expect(titles()[0]).toContain('سلطة فواكه')
+    fireEvent.change(screen.getByLabelText('الترتيب'), { target: { value: 'longest' } })
+    expect(titles()[0]).toContain('سلطة خضراء') // never cooked comes first
+    expect(titles()[titles().length - 1]).toContain('سلطة فواكه') // cooked most recently comes last
+  })
+
+  it('can show only the recipes never cooked', async () => {
+    cookStats = new Map([['salads-002', { count: 4, lastOn: '2026-11-10' }]])
+    render(<LibraryPage canEdit />)
+    fireEvent.click(await screen.findByRole('button', { name: 'لم تُجرَّب بعد (2)' }))
+    expect(screen.queryByText('سلطة فواكه')).toBeNull()
+    expect(screen.getByText('سلطة خضراء')).toBeTruthy()
+    expect(screen.getByText('شوربة عدس')).toBeTruthy()
   })
 })

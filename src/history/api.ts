@@ -139,3 +139,24 @@ export function timesLabel(count: number): string {
   if (count < 11) return `طُبخت ${count} مرات`
   return `طُبخت ${count} مرة`
 }
+
+// ---- Cooking statistics for the library ----
+
+export interface CookStat {
+  count: number
+  lastOn: string // YYYY-MM-DD
+}
+
+// How many times each recipe was cooked and when last, from everyone's history. Kept on the device
+// for use without a connection.
+export const listCookStats = (): Promise<Map<string, CookStat>> =>
+  readThrough('cookstats', async () => {
+    const { data, error } = await supabase.from('cook_log').select('recipe_id,cooked_on').is('deleted_at', null)
+    fail(error)
+    const stats = new Map<string, CookStat>()
+    for (const row of data as Array<{ recipe_id: string; cooked_on: string }>) {
+      const current = stats.get(row.recipe_id)
+      stats.set(row.recipe_id, { count: (current?.count ?? 0) + 1, lastOn: current && current.lastOn > row.cooked_on ? current.lastOn : row.cooked_on })
+    }
+    return stats
+  })

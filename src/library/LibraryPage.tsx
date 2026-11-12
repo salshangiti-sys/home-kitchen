@@ -6,6 +6,8 @@ import { href } from '../router'
 import { Badge, Button, LinkButton, Notice } from '../ui'
 import { countTrash, downloadJson, exportRecipes, listRecipes, type RecipeSummary } from './api'
 import { coverThumbs } from '../photos/api'
+import { listCookStats, localDate, type CookStat } from '../history/api'
+import { SORT_LABELS, cookLine, sortRecipes, type SortMode } from '../history/stats'
 import { matchesQuery, normalizeAr } from './normalize'
 import BulkTagPanel from './BulkTagPanel'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeStatus } from './types'
@@ -21,6 +23,9 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   const [status, setStatus] = useState<RecipeStatus | null>(null)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [onlyFlagged, setOnlyFlagged] = useState(false)
+  const [onlyNeverCooked, setOnlyNeverCooked] = useState(false)
+  const [sort, setSort] = useState<SortMode>('name')
+  const [stats, setStats] = useState<Map<string, CookStat> | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState<string | null>(null)
 
@@ -36,6 +41,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
     listRecipes().then(setData, (e: Error) => setError(e.message))
     if (canEdit) countTrash().then(setTrashed, () => undefined)
     coverThumbs().then(setCovers)
+    listCookStats().then(setStats, () => undefined) // only for sorting and the line under a recipe
   }, [canEdit])
 
   const sections = useMemo(() => {
@@ -46,15 +52,19 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
 
   const shown = useMemo(() => {
     if (!data) return []
-    return data.recipes.filter(
+    const matching = data.recipes.filter(
       (r) =>
         (!section || r.section === section) &&
         (!status || r.status === status) &&
         (!onlyFavorites || data.favorites.has(r.id)) &&
         (!onlyFlagged || data.openFlags.has(r.id)) &&
+        (!onlyNeverCooked || !stats?.has(r.id)) &&
         matchesQuery(r.search_norm || normalizeAr(r.title), query),
     )
-  }, [data, query, section, status, onlyFavorites, onlyFlagged])
+    return sortRecipes(matching, stats ?? new Map(), sort)
+  }, [data, query, section, status, onlyFavorites, onlyFlagged, onlyNeverCooked, stats, sort])
+  const neverCooked = useMemo(() => (stats && data ? data.recipes.filter((r) => !stats.has(r.id)).length : 0), [stats, data])
+  const today = localDate()
 
   // Only recipes that are shown count as selected: one filtered out of sight is never tagged.
   const chosen = shown.filter((recipe) => selected.has(recipe.id)).map((recipe) => recipe.id)
@@ -122,6 +132,11 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
             {STATUS_LABELS[s]}
           </button>
         ))}
+        {stats && stats.size > 0 && neverCooked > 0 && (
+          <button type="button" className={chip(onlyNeverCooked)} onClick={() => setOnlyNeverCooked(!onlyNeverCooked)}>
+            لم تُجرَّب بعد ({neverCooked})
+          </button>
+        )}
         {data.openFlags.size > 0 && (
           <button type="button" className={chip(onlyFlagged)} onClick={() => setOnlyFlagged(!onlyFlagged)}>
             تحتاج مراجعة ({data.openFlags.size})
@@ -143,7 +158,19 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted">{shown.length === data.recipes.length ? `${shown.length} وصفة` : `${shown.length} من ${data.recipes.length} وصفة`}</p>
-            {canEdit && !selecting && <Button kind="plain" onClick={() => setSelecting(true)}>توسيم عدة وصفات</Button>}
+            <div className="flex flex-wrap items-center gap-2">
+              {stats && stats.size > 0 && (
+                <label className="flex items-center gap-2 text-sm">
+                  الترتيب
+                  <select value={sort} onChange={(e) => setSort(e.target.value as SortMode)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-sm">
+                    {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
+                      <option key={mode} value={mode}>{SORT_LABELS[mode]}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {canEdit && !selecting && <Button kind="plain" onClick={() => setSelecting(true)}>توسيم عدة وصفات</Button>}
+            </div>
           </div>
           {bulkNote && <Notice>{bulkNote}</Notice>}
           {selecting && (
@@ -174,7 +201,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
               selecting ? (
                 <SelectableRow key={recipe.id} recipe={recipe} checked={selected.has(recipe.id)} onToggle={() => toggle(recipe.id)} />
               ) : (
-                <RecipeRow key={recipe.id} recipe={recipe} cover={covers.get(recipe.id)} favorite={data.favorites.has(recipe.id)} flagged={data.openFlags.has(recipe.id)} />
+                <RecipeRow key={recipe.id} recipe={recipe} cover={covers.get(recipe.id)} favorite={data.favorites.has(recipe.id)} flagged={data.openFlags.has(recipe.id)} cooked={cookLine(stats?.get(recipe.id), today)} />
               ),
             )}
           </ul>
@@ -195,7 +222,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   )
 }
 
-function RecipeRow({ recipe, cover, favorite, flagged }: { recipe: RecipeSummary; cover?: string; favorite: boolean; flagged: boolean }) {
+function RecipeRow({ recipe, cover, favorite, flagged, cooked }: { recipe: RecipeSummary; cover?: string; favorite: boolean; flagged: boolean; cooked: string | null }) {
   return (
     <li>
       <a href={href.recipe(recipe.id)} className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
@@ -207,6 +234,7 @@ function RecipeRow({ recipe, cover, favorite, flagged }: { recipe: RecipeSummary
         <span className="flex min-w-0 flex-1 flex-col">
           <span dir="auto" className="truncate font-medium">{recipe.title}</span>
           <span dir="auto" className="text-sm text-muted">{recipe.section}</span>
+          {cooked && <span className="text-xs text-muted">{cooked}</span>}
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {recipe.status !== 'complete' && <Badge tone={recipe.status === 'partial' ? 'warn' : 'plain'}>{STATUS_LABELS[recipe.status]}</Badge>}
