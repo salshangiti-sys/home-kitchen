@@ -200,6 +200,7 @@ describe('the OneDrive app folder', () => {
 
   it('downloads the bytes, lists every page of files, and deletes by id', async () => {
     const { drive: d, calls } = drive([
+      json({ id: 'x' }), // no download address: the /content route is used
       new Response('{"x":1}', { status: 200 }),
       json({ value: [{ id: 'a', name: 'one' }], '@odata.nextLink': `${DRIVE_BASE}/special/approot/children?$skiptoken=2` }),
       json({ value: [{ id: 'b', name: 'two' }] }),
@@ -209,6 +210,7 @@ describe('the OneDrive app folder', () => {
     expect(await d.list()).toEqual([{ id: 'a', name: 'one' }, { id: 'b', name: 'two' }])
     await d.remove('b')
     expect(calls.map((c) => `${c.method} ${c.url.replace(DRIVE_BASE, '')}`)).toEqual([
+      'GET /special/approot:/f.json?$select=id,@microsoft.graph.downloadUrl',
       'GET /special/approot:/f.json:/content',
       'GET /special/approot/children?$select=id,name&$top=200',
       'GET /special/approot/children?$skiptoken=2',
@@ -387,38 +389,63 @@ describe('the OneDrive photo folder', () => {
 })
 
 describe('reading the backup file back from OneDrive', () => {
-  const responses = (list: Response[]) => {
+  const failure = (status: number) => new Response('<html>An unexpected error has occurred.</html>', { status })
+  const meta = (url: string | null) => new Response(JSON.stringify(url ? { id: 'x', '@microsoft.graph.downloadUrl': url } : { id: 'x' }))
+
+  // `graph` answers the calls to Graph in order; `direct` answers the fetches of download addresses.
+  function setup(graph: Response[], direct: Response[] = []) {
     const waits: number[] = []
-    let calls = 0
+    const asked: string[] = []
+    const directAsked: Array<{ url: string; init?: RequestInit }> = []
     const client = new OneNoteClient({
       baseUrl: DRIVE_BASE,
       getAccessToken: async () => 't',
-      fetch: (async () => (calls++, list.shift()!)) as never,
+      fetch: (async (url: string) => (asked.push(url.replace(DRIVE_BASE, '')), graph.shift()!)) as never,
       sleep: async () => {},
     })
-    return { d: oneDrive(client, async (ms) => void waits.push(ms)), waits, calls: () => calls }
+    const d = oneDrive(client, {
+      sleep: async (ms) => void waits.push(ms),
+      fetch: (async (url: string, init?: RequestInit) => (directAsked.push({ url, init }), direct.shift()!)) as never,
+    })
+    return { d, waits, asked, directAsked }
   }
-  const failure = (status: number) => new Response('<html>An unexpected error has occurred.</html>', { status })
+  const text = async (bytes: Promise<Uint8Array>) => new TextDecoder().decode(await bytes)
 
-  it('tries again after a passing 401 from the download servers, and then succeeds', async () => {
-    const { d, waits } = responses([failure(401), failure(401), failure(401), failure(401), new Response('{"ok":1}')]) // each try spends two 401s: the client renews the token once
-    expect(new TextDecoder().decode(await d.get('f.json'))).toBe('{"ok":1}')
-    expect(waits).toEqual([2000, 5000])
+  it("reads the file through its own download address, with no sign-in header", async () => {
+    const { d, asked, directAsked } = setup([meta('https://download.example/abc')], [new Response('{"ok":1}')])
+    expect(await text(d.get('f.json'))).toBe('{"ok":1}')
+    expect(asked).toEqual(['/special/approot:/f.json?$select=id,@microsoft.graph.downloadUrl'])
+    expect(directAsked).toEqual([{ url: 'https://download.example/abc', init: undefined }])
   })
 
-  it('tries again when the file is not there yet', async () => {
-    const { d } = responses([failure(404), new Response('x')])
-    expect(new TextDecoder().decode(await d.get('f.json'))).toBe('x')
+  it('falls back to the /content route when the download address does not work', async () => {
+    const { d, asked } = setup([meta('https://download.example/abc'), new Response('{"ok":2}')], [failure(401)])
+    expect(await text(d.get('f.json'))).toBe('{"ok":2}')
+    expect(asked[1]).toBe('/special/approot:/f.json:/content')
   })
 
-  it('gives up after three tries, with the last error', async () => {
-    const { d, waits } = responses([failure(401), failure(401), failure(401), failure(401), failure(401), failure(401), failure(401), failure(401)])
-    await expect(d.get('f.json')).rejects.toThrow(/401/)
-    expect(waits).toEqual([2000, 5000])
+  it('falls back to the /content route when no download address is given', async () => {
+    const { d } = setup([meta(null), new Response('{"ok":3}')])
+    expect(await text(d.get('f.json'))).toBe('{"ok":3}')
+  })
+
+  it('tries once more after a passing error, then succeeds', async () => {
+    const { d, waits } = setup([failure(404), meta('https://download.example/abc')], [new Response('late')])
+    expect(await text(d.get('f.json'))).toBe('late')
+    expect(waits).toEqual([2000])
+  })
+
+  it('gives up after the second try and says what each route answered', async () => {
+    const { d, waits } = setup(
+      [meta('https://download.example/a'), failure(401), failure(401), meta('https://download.example/b'), failure(401), failure(401)],
+      [failure(403), failure(403)],
+    )
+    await expect(d.get('f.json')).rejects.toThrow(/f.json:\/content failed with 401 \[download address: 403\]/)
+    expect(waits).toEqual([2000])
   })
 
   it('does not retry a real mistake', async () => {
-    const { d, waits } = responses([failure(400)])
+    const { d, waits } = setup([failure(400)])
     await expect(d.get('f.json')).rejects.toThrow(/400/)
     expect(waits).toEqual([])
   })
