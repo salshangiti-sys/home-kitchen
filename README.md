@@ -9,6 +9,7 @@
 - [دليل الاستخدام](docs/05-user-guide.md) (للمالكة وللأخت)
 - [تقدّم المرحلة 1 وما جُرّب وما لم يُجرَّب](docs/03-phase1-progress.md)
 - [النسخ الاحتياطي والاستعادة](docs/04-backup-and-restore.md)
+- [خطة المرحلة 2 المقترحة (للموافقة)](docs/06-phase2-plan.md)
 - التحليل والمعمارية والقرارات المعتمدة: [docs/01-analysis-and-architecture.md](docs/01-analysis-and-architecture.md)
 
 ## أدلة الإعداد (بالترتيب)
