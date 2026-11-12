@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { canEdit, SignIn, useAuth } from './auth'
+import RestorePage from './library/RestorePage'
 import ImportPage from './library/ImportPage'
 import LibraryPage from './library/LibraryPage'
 import CookMode from './cook/CookMode'
@@ -150,6 +151,8 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return editor ? <ImportPage /> : <LibraryPage canEdit={false} />
     case 'cook':
       return <CookMode key={route.id} id={route.id} />
+    case 'restore':
+      return editor ? <RestorePage /> : <LibraryPage canEdit={false} />
     case 'trash':
       return editor ? <TrashPage /> : <LibraryPage canEdit={false} />
     case 'onenote':

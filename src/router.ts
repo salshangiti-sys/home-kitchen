@@ -9,6 +9,7 @@ export type Route =
   | { name: 'cook'; id: string }
   | { name: 'new' }
   | { name: 'import' }
+  | { name: 'restore' }
   | { name: 'trash' }
   | { name: 'onenote' }
 
@@ -22,6 +23,7 @@ export function parseHash(hash: string): Route {
   }
   if (parts[0] === 'new') return { name: 'new' }
   if (parts[0] === 'import') return { name: 'import' }
+  if (parts[0] === 'restore') return { name: 'restore' }
   if (parts[0] === 'trash') return { name: 'trash' }
   if (parts[0] === 'onenote') return { name: 'onenote' }
   return { name: 'library' }
@@ -35,6 +37,7 @@ export const href = {
   cooked: (id: string) => `#/r/${encodeURIComponent(id)}/cooked`,
   new: '#/new',
   import: '#/import',
+  restore: '#/restore',
   trash: '#/trash',
   onenote: '#/onenote',
 }

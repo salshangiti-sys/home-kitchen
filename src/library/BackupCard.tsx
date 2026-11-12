@@ -2,7 +2,8 @@
 // a button to back up now.
 
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Card, Notice } from '../ui'
+import { href } from '../router'
+import { Button, Card, LinkButton, Notice } from '../ui'
 import { explain } from '../offline/readThrough'
 import { backUpNow, backupState, formatBytes, loadBackupRuns, photoLine, type BackupRun } from './backupStatus'
 import { timeAgo } from './onenote'
@@ -73,10 +74,11 @@ export default function BackupCard() {
         {runs === null && !message && <p className="text-sm text-muted">جارٍ التحميل…</p>}
 
         {message && <Notice tone={message.error ? 'error' : 'plain'}>{message.text}</Notice>}
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Button disabled={busy} onClick={now}>
             {busy ? 'جارٍ النسخ والفحص…' : 'انسخي الآن'}
           </Button>
+          <LinkButton href={href.restore}>استعادة من نسخة</LinkButton>
         </div>
       </div>
     </Card>
