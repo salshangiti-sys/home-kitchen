@@ -27,7 +27,8 @@ export function oneDrive(client: OneNoteClient, extras: Extras = {}): Drive & Ph
   const plainFetch = extras.fetch ?? fetch
   // The file's own pre-signed, short-lived download address (documented: @microsoft.graph.downloadUrl).
   const downloadUrl = async (name: string): Promise<string | null> => {
-    const response = await client.request('GET', `${at(name)}?$select=id,@microsoft.graph.downloadUrl`)
+    // The item itself carries the address (asking for it with $select leaves it out: seen in the real answer).
+    const response = await client.request('GET', at(name))
     return ((await response.json()) as { '@microsoft.graph.downloadUrl'?: string })['@microsoft.graph.downloadUrl'] ?? null
   }
   return {
@@ -37,7 +38,16 @@ export function oneDrive(client: OneNoteClient, extras: Extras = {}): Drive & Ph
     },
 
     async put(name, text) {
-      await client.request('PUT', `${at(name)}:/content`, { body: text, contentType: 'application/json; charset=utf-8' })
+      type Item = { size?: number; file?: { hashes?: { sha1Hash?: string } } } | null
+      const response = await client.request('PUT', `${at(name)}:/content`, { body: text, contentType: 'application/json; charset=utf-8' })
+      let item = (await response.json().catch(() => null)) as Item
+      // OneDrive can add the hash a moment after the upload: ask once more for the file's details.
+      if (typeof item?.size === 'number' && !item.file?.hashes?.sha1Hash) {
+        await sleep(1500)
+        const details = await client.request('GET', at(name)).then((r) => r.json() as Promise<Item>, () => null)
+        if (details?.file?.hashes?.sha1Hash) item = details
+      }
+      return typeof item?.size === 'number' ? { size: item.size, sha1: item.file?.hashes?.sha1Hash ?? null } : undefined
     },
 
     // Reads a file through its own download address, which needs no sign-in header. If that does not

@@ -125,9 +125,16 @@ export function filesToRemove(files: DriveFile[], keep = KEEP_BACKUPS): DriveFil
     .slice(keep)
 }
 
+// What OneDrive says about a file it just stored: its size and SHA-1 (it does not always give a hash
+// at once, then the file is read back instead).
+export interface Stored {
+  size: number
+  sha1: string | null
+}
+
 export interface Drive {
   folderName(): Promise<string>
-  put(name: string, text: string): Promise<void>
+  put(name: string, text: string): Promise<Stored | void>
   get(name: string): Promise<Uint8Array>
   list(): Promise<DriveFile[]>
   remove(id: string): Promise<void>
@@ -259,9 +266,22 @@ export async function runBackup(deps: BackupDeps): Promise<RunRecord> {
     // Asking for the app folder first is what makes OneDrive create it (Microsoft: the folder is
     // created by the first call to the special folder), so the upload has somewhere to go.
     record.folder_name = await deps.drive.folderName()
-    await deps.drive.put(file.name, file.text)
+    const stored = await deps.drive.put(file.name, file.text)
 
-    const problems = await verifyBackup(await deps.drive.get(file.name), file, deps.check)
+    // 1. The file we are sending is complete and valid: JSON of the right format, counts that match,
+    //    every recipe valid against the schema.
+    const sent = new TextEncoder().encode(file.text)
+    let problems = await verifyBackup(sent, file, deps.check)
+    // 2. OneDrive stored exactly those bytes. Its own size and SHA-1 say so; when it gives no hash,
+    //    the file is read back from OneDrive and compared byte for byte.
+    if (!problems.length) {
+      if (stored && stored.sha1) {
+        if (stored.size !== file.bytes) problems.push(`OneDrive stored ${stored.size} bytes, expected ${file.bytes}`)
+        else if (stored.sha1.toLowerCase() !== (await sha1Hex(sent))) problems.push('OneDrive\'s copy does not match the file written (SHA-1 differs)')
+      } else {
+        problems = await verifyBackup(await deps.drive.get(file.name), file, deps.check)
+      }
+    }
     if (problems.length) {
       record.error = `The backup was written but did not pass the check: ${problems.join(' | ')}`
       return record
