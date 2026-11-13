@@ -75,12 +75,31 @@ export const listTemplates = (recipeId: string): Promise<Template[]> =>
     return data as Template[]
   })
 
+const TASK_COLUMNS = 'id,planned_meal_id,day,timing,at_time,kind,body,from_template,done_at,done_by,position'
+
+// The meals the tasks belong to (their title, day and slot name).
+async function mealsOf(tasks: Task[]): Promise<Record<string, MealInfo>> {
+  const ids = [...new Set(tasks.flatMap((t) => (t.planned_meal_id ? [t.planned_meal_id] : [])))]
+  const meals: Record<string, MealInfo> = {}
+  if (ids.length) {
+    const [m, s] = await Promise.all([
+      supabase.from('planned_meals').select('id,title,day,slot_id').in('id', ids),
+      supabase.from('meal_slots').select('id,name'),
+    ])
+    fail(m.error)
+    fail(s.error)
+    const slots = new Map((s.data as Array<{ id: string; name: string }>).map((x) => [x.id, x.name]))
+    for (const row of m.data as Array<{ id: string; title: string; day: string; slot_id: string }>) meals[row.id] = { title: row.title, day: row.day, slot: slots.get(row.slot_id) ?? '' }
+  }
+  return meals
+}
+
 // Open tasks of the last 14 days (the late ones) up to tomorrow, and the ones done on those days.
 export const loadNow = (today: string): Promise<NowData> =>
   readThrough(`prep-now:${today}`, async () => {
     const { data, error } = await supabase
       .from('prep_tasks')
-      .select('id,planned_meal_id,day,timing,at_time,kind,body,from_template,done_at,done_by,position')
+      .select(TASK_COLUMNS)
       .is('dismissed_at', null)
       .gte('day', addDays(today, -14))
       .lte('day', addDays(today, 1))
@@ -88,19 +107,24 @@ export const loadNow = (today: string): Promise<NowData> =>
       .order('position')
     fail(error)
     const tasks = data as Task[]
-    const ids = [...new Set(tasks.flatMap((t) => (t.planned_meal_id ? [t.planned_meal_id] : [])))]
-    const meals: Record<string, MealInfo> = {}
-    if (ids.length) {
-      const [m, s] = await Promise.all([
-        supabase.from('planned_meals').select('id,title,day,slot_id').in('id', ids),
-        supabase.from('meal_slots').select('id,name'),
-      ])
-      fail(m.error)
-      fail(s.error)
-      const slots = new Map((s.data as Array<{ id: string; name: string }>).map((x) => [x.id, x.name]))
-      for (const row of m.data as Array<{ id: string; title: string; day: string; slot_id: string }>) meals[row.id] = { title: row.title, day: row.day, slot: slots.get(row.slot_id) ?? '' }
-    }
-    return { tasks, meals }
+    return { tasks, meals: await mealsOf(tasks) }
+  })
+
+// The tasks of a plan week for printing: the day before it starts too (the evening tasks for the
+// first day's meals fall there), through its last day.
+export const loadWeekTasks = (weekStart: string): Promise<NowData> =>
+  readThrough(`prep-week:${weekStart}`, async () => {
+    const { data, error } = await supabase
+      .from('prep_tasks')
+      .select(TASK_COLUMNS)
+      .is('dismissed_at', null)
+      .gte('day', addDays(weekStart, -1))
+      .lte('day', addDays(weekStart, 6))
+      .order('day')
+      .order('position')
+    fail(error)
+    const tasks = data as Task[]
+    return { tasks, meals: await mealsOf(tasks) }
   })
 
 async function rpc<T = void>(name: string, args: Record<string, unknown>): Promise<T> {

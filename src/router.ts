@@ -10,6 +10,7 @@ export type Route =
   | { name: 'new' }
   | { name: 'plan'; week?: string }
   | { name: 'now' }
+  | { name: 'print'; week?: string; tasks: boolean } // the week plan as a printable page
   | { name: 'import' }
   | { name: 'restore' }
   | { name: 'trash' }
@@ -26,6 +27,10 @@ export function parseHash(hash: string): Route {
   if (parts[0] === 'new') return { name: 'new' }
   if (parts[0] === 'plan') return /^\d{4}-\d{2}-\d{2}$/.test(parts[1] ?? '') ? { name: 'plan', week: parts[1] } : { name: 'plan' }
   if (parts[0] === 'now') return { name: 'now' }
+  if (parts[0] === 'print') {
+    const week = /^\d{4}-\d{2}-\d{2}$/.test(parts[1] ?? '') ? parts[1] : undefined
+    return { name: 'print', ...(week ? { week } : {}), tasks: parts.includes('tasks') }
+  }
   if (parts[0] === 'import') return { name: 'import' }
   if (parts[0] === 'restore') return { name: 'restore' }
   if (parts[0] === 'trash') return { name: 'trash' }
@@ -42,6 +47,7 @@ export const href = {
   new: '#/new',
   plan: (week?: string) => (week ? `#/plan/${week}` : '#/plan'),
   now: '#/now',
+  print: (week: string | undefined, tasks: boolean) => `#/print${week ? `/${week}` : ''}${tasks ? '/tasks' : ''}`,
   import: '#/import',
   restore: '#/restore',
   trash: '#/trash',

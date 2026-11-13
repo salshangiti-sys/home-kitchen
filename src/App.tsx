@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { canEdit, SignIn, useAuth } from './auth'
 import NowPage from './prep/NowPage'
+import PrintPage from './print/PrintPage'
 import PlanPage from './plan/PlanPage'
 import RestorePage from './library/RestorePage'
 import ImportPage from './library/ImportPage'
@@ -86,8 +87,8 @@ export default function App() {
   const backupAlert = useBackupAlert(auth.session != null && editor)
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-5">
-      {!cooking && <header className="flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-5 print:max-w-none print:px-0 print:py-0">
+      {!cooking && <header className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <a href={href.library}>
           <h1 className="text-2xl font-bold">مطبخ البيت</h1>
         </a>
@@ -110,7 +111,7 @@ export default function App() {
       </header>}
 
       {auth.session && !cooking && (
-        <nav aria-label="الأقسام الرئيسية" className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4">
+        <nav aria-label="الأقسام الرئيسية" className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 print:hidden">
           {NAV.filter((item) => editor || !item.editorsOnly).map((item) => {
             const active = item.match.includes(route.name) || (route.name === 'edit' && item.to === href.library)
             return (
@@ -128,14 +129,16 @@ export default function App() {
       )}
 
       <main className="flex flex-col gap-6 pb-10">
-        {auth.session && <OfflineNotice />}
+        {auth.session && <div className="print:hidden"><OfflineNotice /></div>}
         {backupAlert && !cooking && (
-          <Notice tone="error">
-            النسخ الاحتياطي الليلي يحتاج انتباهك. <a href={href.onenote} className="underline">افتحي صفحة OneNote</a> لترين السبب.
-          </Notice>
+          <div className="print:hidden">
+            <Notice tone="error">
+              النسخ الاحتياطي الليلي يحتاج انتباهك. <a href={href.onenote} className="underline">افتحي صفحة OneNote</a> لترين السبب.
+            </Notice>
+          </div>
         )}
         {!auth.ready ? null : !auth.session ? <SignIn /> : <Screen route={route} editor={editor} userId={auth.session.user.id} />}
-        {auth.session && !cooking && <InstallHint />}
+        {auth.session && !cooking && <div className="print:hidden"><InstallHint /></div>}
       </main>
     </div>
   )
@@ -157,6 +160,8 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return <CookMode key={route.id} id={route.id} />
     case 'now':
       return <NowPage canEdit={editor} />
+    case 'print':
+      return <PrintPage week={route.week} withTasks={route.tasks} />
     case 'plan':
       return <PlanPage canEdit={editor} week={route.week} />
     case 'restore':
