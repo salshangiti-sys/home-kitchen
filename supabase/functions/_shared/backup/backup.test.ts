@@ -14,6 +14,7 @@ import {
   isBackupName,
   photoName,
   runBackup,
+  quickXorHash,
   sha1Hex,
   type Bundle,
   type Drive,
@@ -47,6 +48,9 @@ class FakeDrive implements Drive {
   log: string[] = []
   corrupt: ((text: string) => string) | null = null
   failOn: string | null = null
+  // What OneDrive says about the stored file: nothing, the true size and SHA-1, or something wrong.
+  hash: 'none' | 'true' | 'wrong-hash' | 'wrong-size' | 'size-only' | 'quickxor' | 'wrong-quickxor' = 'none'
+  downloadFails = false
   private n = 0
   async folderName() {
     this.log.push('folder')
@@ -57,8 +61,16 @@ class FakeDrive implements Drive {
     this.files.set(name, text)
     this.ids.set(name, `id-${++this.n}`)
     this.log.push(`put ${name}`)
+    if (this.hash === 'none') return undefined
+    const bytes = new TextEncoder().encode(text)
+    if (this.hash === 'size-only') return { size: bytes.length, sha1: null, quickXor: null }
+    if (this.hash === 'quickxor') return { size: bytes.length, sha1: null, quickXor: quickXorHash(bytes) }
+    if (this.hash === 'wrong-quickxor') return { size: bytes.length, sha1: null, quickXor: quickXorHash(bytes.slice(1)) }
+    return { size: this.hash === 'wrong-size' ? bytes.length + 1 : bytes.length, sha1: this.hash === 'wrong-hash' ? 'ab'.repeat(20) : await sha1Hex(bytes) }
   }
   async get(name: string) {
+    this.log.push(`get ${name}`)
+    if (this.downloadFails) throw Object.assign(new Error('GET failed with 401'), { status: 401 })
     const text = this.files.get(name)!
     return new TextEncoder().encode(this.corrupt ? this.corrupt(text) : text)
   }
@@ -94,6 +106,69 @@ describe('the backup file', () => {
 
   it('embeds the same schema the app checks recipes against', () => {
     expect(recipeSchema).toEqual(schema)
+  })
+})
+
+describe('verifying the stored backup', () => {
+  it('trusts OneDrive\'s own size and SHA-1 and does not need to download the file', async () => {
+    const drive = new FakeDrive()
+    drive.hash = 'true'
+    drive.downloadFails = true // a broken download route does not matter any more
+    const record = await run(drive)
+    expect(record).toMatchObject({ ok: true, verified: true, error: null })
+    expect(drive.log.some((entry) => entry.startsWith('get'))).toBe(false)
+  })
+
+  it('fails when OneDrive\'s SHA-1 is not the one of the file written, and removes nothing', async () => {
+    const drive = new FakeDrive()
+    drive.hash = 'wrong-hash'
+    for (let i = 1; i <= 35; i++) drive.files.set(`hk-backup-2026-10-${String(i).padStart(2, '0')}-0230.json`, '{}')
+    const record = await run(drive)
+    expect(record).toMatchObject({ ok: false, verified: false, old_files_removed: 0 })
+    expect(record.error).toMatch(/SHA-1 differs/)
+    expect(drive.log.filter((entry) => entry.startsWith('remove'))).toEqual([])
+  })
+
+  it('fails when OneDrive stored a different number of bytes', async () => {
+    const drive = new FakeDrive()
+    drive.hash = 'wrong-size'
+    expect((await run(drive)).error).toMatch(/OneDrive stored \d+ bytes, expected \d+/)
+  })
+
+  it('accepts the size OneDrive reports when it gives no hash and downloads do not work, without downloading', async () => {
+    const drive = new FakeDrive()
+    drive.hash = 'size-only'
+    drive.downloadFails = true
+    expect(await run(drive)).toMatchObject({ ok: true, verified: true, error: null })
+    expect(drive.log.some((entry) => entry.startsWith('get'))).toBe(false)
+  })
+
+  it('checks OneDrive\'s quickXorHash when that is the hash it gives', async () => {
+    const good = new FakeDrive()
+    good.hash = 'quickxor'
+    expect(await run(good)).toMatchObject({ ok: true, verified: true })
+    const bad = new FakeDrive()
+    bad.hash = 'wrong-quickxor'
+    expect((await run(bad)).error).toMatch(/hash differs/)
+  })
+
+  it('computes the quickXorHash the way OneDrive does (empty file: all zero; length is mixed in)', () => {
+    expect(quickXorHash(new Uint8Array(0))).toBe('AAAAAAAAAAAAAAAAAAAAAAAAAAA=')
+    expect(quickXorHash(new Uint8Array([1]))).toBe('AQAAAAAAAAAAAAAAAQAAAAAAAAA=')
+  })
+
+  it('reads the file back when OneDrive does not even report the stored file', async () => {
+    const drive = new FakeDrive()
+    expect(await run(drive)).toMatchObject({ ok: true, verified: true })
+    expect(drive.log.some((entry) => entry.startsWith('get'))).toBe(true)
+  })
+
+  it('still checks that the file is valid before trusting the hash', async () => {
+    const drive = new FakeDrive()
+    drive.hash = 'true'
+    const record = await run(drive, bundle({ recipes: [SALAD, { id: 'bad-001', title: 'x' }] }))
+    expect(record.ok).toBe(false)
+    expect(record.error).toMatch(/bad-001/)
   })
 })
 
@@ -192,7 +267,7 @@ describe('the OneDrive app folder', () => {
 
   it('uploads into the app folder by name, and reads the folder name', async () => {
     const { drive: d, calls } = drive([new Response('{}', { status: 201 }), json({ name: 'home-kitchen' })])
-    await d.put('hk-backup-2026-11-11-0230.json', '{"a":"م"}')
+    expect(await d.put('hk-backup-2026-11-11-0230.json', '{"a":"م"}')).toBeUndefined() // no size in the answer
     expect(await d.folderName()).toBe('home-kitchen')
     expect(calls[0]).toMatchObject({ method: 'PUT', url: `${DRIVE_BASE}/special/approot:/hk-backup-2026-11-11-0230.json:/content`, body: '{"a":"م"}' })
     expect(calls[1].url).toBe(`${DRIVE_BASE}/special/approot?$select=name`)
@@ -210,7 +285,7 @@ describe('the OneDrive app folder', () => {
     expect(await d.list()).toEqual([{ id: 'a', name: 'one' }, { id: 'b', name: 'two' }])
     await d.remove('b')
     expect(calls.map((c) => `${c.method} ${c.url.replace(DRIVE_BASE, '')}`)).toEqual([
-      'GET /special/approot:/f.json?$select=id,@microsoft.graph.downloadUrl',
+      'GET /special/approot:/f.json',
       'GET /special/approot:/f.json:/content',
       'GET /special/approot/children?$select=id,name&$top=200',
       'GET /special/approot/children?$skiptoken=2',
@@ -414,7 +489,7 @@ describe('reading the backup file back from OneDrive', () => {
   it("reads the file through its own download address, with no sign-in header", async () => {
     const { d, asked, directAsked } = setup([meta('https://download.example/abc')], [new Response('{"ok":1}')])
     expect(await text(d.get('f.json'))).toBe('{"ok":1}')
-    expect(asked).toEqual(['/special/approot:/f.json?$select=id,@microsoft.graph.downloadUrl'])
+    expect(asked).toEqual(['/special/approot:/f.json'])
     expect(directAsked).toEqual([{ url: 'https://download.example/abc', init: undefined }])
   })
 
@@ -448,5 +523,21 @@ describe('reading the backup file back from OneDrive', () => {
     const { d, waits } = setup([failure(400)])
     await expect(d.get('f.json')).rejects.toThrow(/400/)
     expect(waits).toEqual([])
+  })
+
+  it('gives the size and SHA-1 OneDrive reports for the file it stored', async () => {
+    const answers = (...bodies: unknown[]) =>
+      oneDrive(
+        new OneNoteClient({ baseUrl: DRIVE_BASE, getAccessToken: async () => 't', fetch: (async () => new Response(JSON.stringify(bodies.length > 1 ? bodies.shift() : bodies[0]), { status: 201 })) as never, sleep: async () => {} }),
+        { sleep: async () => {} },
+      )
+    expect(await answers({ size: 12, file: { hashes: { sha1Hash: 'ABC' } } }).put('hk-backup.json', '{"a":1}')).toEqual({ size: 12, sha1: 'ABC', quickXor: null })
+    expect(await answers({ size: 12 }).put('hk-backup.json', '{}')).toEqual({ size: 12, sha1: null, quickXor: null })
+  })
+
+  it('asks for the file\'s details when the upload answer has no hash yet, and uses the hash found there', async () => {
+    const answers = (...bodies: unknown[]) =>
+      oneDrive(new OneNoteClient({ baseUrl: DRIVE_BASE, getAccessToken: async () => 't', fetch: (async () => new Response(JSON.stringify(bodies.shift()), { status: 200 })) as never, sleep: async () => {} }), { sleep: async () => {} })
+    expect(await answers({ size: 12 }, { size: 12, file: { hashes: { sha1Hash: 'DEF' } } }).put('hk-backup.json', '{}')).toEqual({ size: 12, sha1: 'DEF', quickXor: null })
   })
 })
