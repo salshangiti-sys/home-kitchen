@@ -76,3 +76,26 @@ body {
   color: var(--text);
   font-family: var(--font-sans);
 }
+
+/* Printing: A4, light colours whatever the theme is, no page background. */
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  :root,
+  :root[data-theme='dark'] {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --text: #000000;
+    --muted: #444444;
+    --border: #999999;
+    --accent: #1f4d37;
+    color-scheme: light;
+  }
+  body {
+    background: #ffffff;
+    font-size: 12pt;
+  }
+}

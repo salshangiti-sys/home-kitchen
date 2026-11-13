@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { href, navigate } from '../router'
-import { Button, Notice } from '../ui'
+import { Button, LinkButton, Notice } from '../ui'
 import { listRecipes } from '../library/api'
 import { generateTasks } from '../prep/api'
 import { FOOD_GROUPS, FOOD_GROUP_LABELS, type FoodGroup } from '../nutrition/api'
@@ -125,6 +125,12 @@ export default function PlanPage({ week, canEdit, today = todayIso, api = realAp
         </div>
         <Button kind="plain" onClick={() => goTo(addDays(data.weekStart, 7))}>الأسبوع التالي ←</Button>
       </div>
+
+      {!empty && (
+        <div>
+          <LinkButton href={href.print(data.weekStart, false)}>طباعة الأسبوع / PDF</LinkButton>
+        </div>
+      )}
 
       {error && <Notice tone="error">{error}</Notice>}
       {note && <Notice>{note}</Notice>}
