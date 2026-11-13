@@ -14,6 +14,7 @@ import {
   isBackupName,
   photoName,
   runBackup,
+  quickXorHash,
   sha1Hex,
   type Bundle,
   type Drive,
@@ -48,7 +49,7 @@ class FakeDrive implements Drive {
   corrupt: ((text: string) => string) | null = null
   failOn: string | null = null
   // What OneDrive says about the stored file: nothing, the true size and SHA-1, or something wrong.
-  hash: 'none' | 'true' | 'wrong-hash' | 'wrong-size' = 'none'
+  hash: 'none' | 'true' | 'wrong-hash' | 'wrong-size' | 'size-only' | 'quickxor' | 'wrong-quickxor' = 'none'
   downloadFails = false
   private n = 0
   async folderName() {
@@ -62,6 +63,9 @@ class FakeDrive implements Drive {
     this.log.push(`put ${name}`)
     if (this.hash === 'none') return undefined
     const bytes = new TextEncoder().encode(text)
+    if (this.hash === 'size-only') return { size: bytes.length, sha1: null, quickXor: null }
+    if (this.hash === 'quickxor') return { size: bytes.length, sha1: null, quickXor: quickXorHash(bytes) }
+    if (this.hash === 'wrong-quickxor') return { size: bytes.length, sha1: null, quickXor: quickXorHash(bytes.slice(1)) }
     return { size: this.hash === 'wrong-size' ? bytes.length + 1 : bytes.length, sha1: this.hash === 'wrong-hash' ? 'ab'.repeat(20) : await sha1Hex(bytes) }
   }
   async get(name: string) {
@@ -131,7 +135,29 @@ describe('verifying the stored backup', () => {
     expect((await run(drive)).error).toMatch(/OneDrive stored \d+ bytes, expected \d+/)
   })
 
-  it('reads the file back when OneDrive gives no hash', async () => {
+  it('accepts the size OneDrive reports when it gives no hash and downloads do not work, without downloading', async () => {
+    const drive = new FakeDrive()
+    drive.hash = 'size-only'
+    drive.downloadFails = true
+    expect(await run(drive)).toMatchObject({ ok: true, verified: true, error: null })
+    expect(drive.log.some((entry) => entry.startsWith('get'))).toBe(false)
+  })
+
+  it('checks OneDrive\'s quickXorHash when that is the hash it gives', async () => {
+    const good = new FakeDrive()
+    good.hash = 'quickxor'
+    expect(await run(good)).toMatchObject({ ok: true, verified: true })
+    const bad = new FakeDrive()
+    bad.hash = 'wrong-quickxor'
+    expect((await run(bad)).error).toMatch(/hash differs/)
+  })
+
+  it('computes the quickXorHash the way OneDrive does (empty file: all zero; length is mixed in)', () => {
+    expect(quickXorHash(new Uint8Array(0))).toBe('AAAAAAAAAAAAAAAAAAAAAAAAAAA=')
+    expect(quickXorHash(new Uint8Array([1]))).toBe('AQAAAAAAAAAAAAAAAQAAAAAAAAA=')
+  })
+
+  it('reads the file back when OneDrive does not even report the stored file', async () => {
     const drive = new FakeDrive()
     expect(await run(drive)).toMatchObject({ ok: true, verified: true })
     expect(drive.log.some((entry) => entry.startsWith('get'))).toBe(true)
@@ -505,13 +531,13 @@ describe('reading the backup file back from OneDrive', () => {
         new OneNoteClient({ baseUrl: DRIVE_BASE, getAccessToken: async () => 't', fetch: (async () => new Response(JSON.stringify(bodies.length > 1 ? bodies.shift() : bodies[0]), { status: 201 })) as never, sleep: async () => {} }),
         { sleep: async () => {} },
       )
-    expect(await answers({ size: 12, file: { hashes: { sha1Hash: 'ABC' } } }).put('hk-backup.json', '{"a":1}')).toEqual({ size: 12, sha1: 'ABC' })
-    expect(await answers({ size: 12 }).put('hk-backup.json', '{}')).toEqual({ size: 12, sha1: null })
+    expect(await answers({ size: 12, file: { hashes: { sha1Hash: 'ABC' } } }).put('hk-backup.json', '{"a":1}')).toEqual({ size: 12, sha1: 'ABC', quickXor: null })
+    expect(await answers({ size: 12 }).put('hk-backup.json', '{}')).toEqual({ size: 12, sha1: null, quickXor: null })
   })
 
   it('asks for the file\'s details when the upload answer has no hash yet, and uses the hash found there', async () => {
     const answers = (...bodies: unknown[]) =>
       oneDrive(new OneNoteClient({ baseUrl: DRIVE_BASE, getAccessToken: async () => 't', fetch: (async () => new Response(JSON.stringify(bodies.shift()), { status: 200 })) as never, sleep: async () => {} }), { sleep: async () => {} })
-    expect(await answers({ size: 12 }, { size: 12, file: { hashes: { sha1Hash: 'DEF' } } }).put('hk-backup.json', '{}')).toEqual({ size: 12, sha1: 'DEF' })
+    expect(await answers({ size: 12 }, { size: 12, file: { hashes: { sha1Hash: 'DEF' } } }).put('hk-backup.json', '{}')).toEqual({ size: 12, sha1: 'DEF', quickXor: null })
   })
 })

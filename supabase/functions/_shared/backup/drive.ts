@@ -20,34 +20,51 @@ interface Extras {
   sleep?: (ms: number) => Promise<void>
   // Used for the temporary download address (which needs no sign-in header).
   fetch?: typeof fetch
+  // Called with one short line per OneDrive call (what, how long, what came back).
+  log?: (line: string) => void
 }
 
 export function oneDrive(client: OneNoteClient, extras: Extras = {}): Drive & PhotoDrive {
   const sleep = extras.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   const plainFetch = extras.fetch ?? fetch
+  const log = extras.log ?? (() => undefined)
+  // Every OneDrive call goes through here so a slow or failing one shows up in the trace.
+  const call = async (method: string, path: string, init?: { body?: string | Uint8Array; contentType?: string }) => {
+    const started = Date.now()
+    try {
+      const response = await client.request(method, path, init)
+      log(`${method} ${path.split('?')[0].slice(0, 60)} ${response.status} ${Date.now() - started}ms`)
+      return response
+    } catch (error) {
+      log(`${method} ${path.split('?')[0].slice(0, 60)} ${(error as { status?: number }).status ?? 'error'} ${Date.now() - started}ms`)
+      throw error
+    }
+  }
   // The file's own pre-signed, short-lived download address (documented: @microsoft.graph.downloadUrl).
   const downloadUrl = async (name: string): Promise<string | null> => {
     // The item itself carries the address (asking for it with $select leaves it out: seen in the real answer).
-    const response = await client.request('GET', at(name))
+    const response = await call('GET', at(name))
     return ((await response.json()) as { '@microsoft.graph.downloadUrl'?: string })['@microsoft.graph.downloadUrl'] ?? null
   }
   return {
     async folderName() {
-      const response = await client.request('GET', '/special/approot?$select=name')
+      const response = await call('GET', '/special/approot?$select=name')
       return ((await response.json()) as { name: string }).name
     },
 
     async put(name, text) {
-      type Item = { size?: number; file?: { hashes?: { sha1Hash?: string } } } | null
-      const response = await client.request('PUT', `${at(name)}:/content`, { body: text, contentType: 'application/json; charset=utf-8' })
+      type Item = { size?: number; file?: { hashes?: { sha1Hash?: string; quickXorHash?: string } } } | null
+      const response = await call('PUT', `${at(name)}:/content`, { body: text, contentType: 'application/json; charset=utf-8' })
       let item = (await response.json().catch(() => null)) as Item
+      log(`PUT answer: size ${item?.size ?? 'none'}, hashes ${Object.keys(item?.file?.hashes ?? {}).join('+') || 'none'}`)
       // OneDrive can add the hash a moment after the upload: ask once more for the file's details.
-      if (typeof item?.size === 'number' && !item.file?.hashes?.sha1Hash) {
+      if (typeof item?.size === 'number' && !item.file?.hashes?.sha1Hash && !item.file?.hashes?.quickXorHash) {
         await sleep(1500)
-        const details = await client.request('GET', at(name)).then((r) => r.json() as Promise<Item>, () => null)
-        if (details?.file?.hashes?.sha1Hash) item = details
+        const details = await call('GET', at(name)).then((r) => r.json() as Promise<Item>, () => null)
+        log(`details answer: hashes ${Object.keys(details?.file?.hashes ?? {}).join('+') || 'none'}`)
+        if (details?.file?.hashes?.sha1Hash || details?.file?.hashes?.quickXorHash) item = details
       }
-      return typeof item?.size === 'number' ? { size: item.size, sha1: item.file?.hashes?.sha1Hash ?? null } : undefined
+      return typeof item?.size === 'number' ? { size: item.size, sha1: item.file?.hashes?.sha1Hash ?? null, quickXor: item.file?.hashes?.quickXorHash ?? null } : undefined
     },
 
     // Reads a file through its own download address, which needs no sign-in header. If that does not
@@ -60,7 +77,9 @@ export function oneDrive(client: OneNoteClient, extras: Extras = {}): Drive & Ph
           const url = await downloadUrl(name)
           if (url) {
             try {
+              const startedAt = Date.now()
               const direct = await plainFetch(url)
+              log(`GET download-address ${direct.status} ${Date.now() - startedAt}ms`)
               if (direct.ok) return new Uint8Array(await direct.arrayBuffer())
               notes.push(`download address: ${direct.status}`)
             } catch (error) {
@@ -69,7 +88,7 @@ export function oneDrive(client: OneNoteClient, extras: Extras = {}): Drive & Ph
           } else {
             notes.push('download address: none given')
           }
-          const response = await client.request('GET', `${at(name)}:/content`)
+          const response = await call('GET', `${at(name)}:/content`)
           return new Uint8Array(await response.arrayBuffer())
         } catch (error) {
           const status = (error as { status?: number }).status
@@ -87,7 +106,7 @@ export function oneDrive(client: OneNoteClient, extras: Extras = {}): Drive & Ph
       const files: DriveFile[] = []
       let path: string | null = '/special/approot/children?$select=id,name&$top=200'
       while (path) {
-        const body = (await (await client.request('GET', path)).json()) as { value: DriveFile[]; '@odata.nextLink'?: string }
+        const body = (await (await call('GET', path)).json()) as { value: DriveFile[]; '@odata.nextLink'?: string }
         files.push(...body.value)
         const next = body['@odata.nextLink']
         path = next ? next.slice(next.indexOf('/me/drive') + '/me/drive'.length) : null
@@ -96,7 +115,7 @@ export function oneDrive(client: OneNoteClient, extras: Extras = {}): Drive & Ph
     },
 
     async remove(id) {
-      await client.request('DELETE', `/items/${encodeURIComponent(id)}`)
+      await call('DELETE', `/items/${encodeURIComponent(id)}`)
     },
 
     // The photos folder (OneDrive creates it with the first photo, and the folders in a path).
@@ -106,7 +125,7 @@ export function oneDrive(client: OneNoteClient, extras: Extras = {}): Drive & Ph
       while (path) {
         let body: { value: Array<{ name: string }>; '@odata.nextLink'?: string }
         try {
-          body = (await (await client.request('GET', path)).json()) as typeof body
+          body = (await (await call('GET', path)).json()) as typeof body
         } catch (error) {
           if ((error as { status?: number }).status === 404) return names // nothing copied yet
           throw error
@@ -119,7 +138,7 @@ export function oneDrive(client: OneNoteClient, extras: Extras = {}): Drive & Ph
     },
 
     async putPhoto(name, bytes) {
-      const response = await client.request('PUT', `/special/approot:/photos/${encodeURIComponent(name)}:/content`, { body: bytes, contentType: 'image/jpeg' })
+      const response = await call('PUT', `/special/approot:/photos/${encodeURIComponent(name)}:/content`, { body: bytes, contentType: 'image/jpeg' })
       const item = (await response.json()) as { size: number; file?: { hashes?: { sha1Hash?: string } } }
       return { size: item.size, sha1: item.file?.hashes?.sha1Hash ?? null }
     },

@@ -18,18 +18,32 @@ const check = recipeChecker(Ajv)
 
 type Trigger = 'schedule' | 'manual'
 
+// The function is cut off at 150 s with no answer at all, so the backup gives up a little earlier and
+// says where it was. Every OneDrive call also has its own limit, and is not repeated more than once.
+const RUN_LIMIT_MS = 125_000
+const CALL_LIMIT_MS = 25_000
+
 async function backUp(admin: ReturnType<typeof adminClient>, householdId: string, userId: string, connected: boolean, trigger: Trigger) {
   const { data: started, error: startError } = await admin.from('backup_runs').insert({ household_id: householdId, trigger }).select('id').single()
   if (startError) throw new Error(`could not log the run: ${startError.message}`)
 
-  const record = connected
-    ? await runBackup({
+  const trace: string[] = []
+  const began = Date.now()
+  const note = (line: string) => trace.push(`${Math.round((Date.now() - began) / 1000)}s ${line}`)
+  const client = new OneNoteClient({
+    baseUrl: DRIVE_BASE,
+    getAccessToken: accessTokenProvider(admin, userId, oauthConfig()),
+    fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(CALL_LIMIT_MS) }),
+    maxAttempts: 2,
+  })
+  const run = connected
+    ? runBackup({
         bundle: async () => {
           const { data, error } = await admin.rpc('backup_bundle', { p_household: householdId })
           if (error) throw new Error(`could not read the data: ${error.message}`)
           return data as Bundle
         },
-        drive: oneDrive(new OneNoteClient({ baseUrl: DRIVE_BASE, getAccessToken: accessTokenProvider(admin, userId, oauthConfig()) })),
+        drive: oneDrive(client, { log: note, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(CALL_LIMIT_MS) }) }),
         check,
         now: () => new Date(),
         photos: {
@@ -46,7 +60,16 @@ async function backUp(admin: ReturnType<typeof adminClient>, householdId: string
           },
         },
       })
-    : { ok: false, verified: false, old_files_removed: 0, file_name: null, error: 'Microsoft account is not connected: sign in again from the OneNote page' }
+    : Promise.resolve({ ok: false, verified: false, old_files_removed: 0, file_name: null, error: 'Microsoft account is not connected: sign in again from the OneNote page' })
+  let timer: number | undefined
+  const giveUp = new Promise<'late'>((resolve) => {
+    timer = setTimeout(() => resolve('late'), RUN_LIMIT_MS)
+  })
+  const outcome = await Promise.race([run, giveUp])
+  clearTimeout(timer)
+  const record = outcome === 'late' ? { ok: false, verified: false, old_files_removed: 0, file_name: null, error: 'The backup did not finish in time' } : outcome
+  // What each OneDrive call did, so a failure says where it stopped.
+  if (!record.ok && trace.length) record.error = `${record.error ?? ''} | steps: ${trace.join('; ')}`.slice(0, 1500)
 
   await admin
     .from('backup_runs')

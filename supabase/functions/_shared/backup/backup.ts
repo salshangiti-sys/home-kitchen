@@ -130,6 +130,8 @@ export function filesToRemove(files: DriveFile[], keep = KEEP_BACKUPS): DriveFil
 export interface Stored {
   size: number
   sha1: string | null
+  // OneDrive's own hash (base64), given by personal accounts that give no SHA-1.
+  quickXor?: string | null
 }
 
 export interface Drive {
@@ -184,6 +186,27 @@ export const photoName = (id: string) => `${id}.jpg`
 export async function sha1Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-1', bytes as unknown as BufferSource)
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+// OneDrive's quickXorHash (documented by Microsoft): 160 bits; byte i is XORed in at bit (i * 11) mod 160,
+// wrapping around; the length (64 bits, little-endian) is XORed into the last 8 bytes; shown as base64.
+export function quickXorHash(bytes: Uint8Array): string {
+  const cells = new Uint8Array(20)
+  for (let i = 0; i < bytes.length; i++) {
+    const at = (i * 11) % 160
+    const index = at >> 3
+    const value = bytes[i] << (at & 7)
+    cells[index] ^= value & 0xff
+    cells[(index + 1) % 20] ^= value >> 8
+  }
+  let length = BigInt(bytes.length)
+  for (let k = 0; k < 8; k++) {
+    cells[12 + k] ^= Number(length & 0xffn)
+    length >>= 8n
+  }
+  let binary = ''
+  for (const byte of cells) binary += String.fromCharCode(byte)
+  return btoa(binary)
 }
 
 // Copies the photos that are missing. Never throws: a problem stops the copying and is reported.
@@ -272,14 +295,18 @@ export async function runBackup(deps: BackupDeps): Promise<RunRecord> {
     //    every recipe valid against the schema.
     const sent = new TextEncoder().encode(file.text)
     let problems = await verifyBackup(sent, file, deps.check)
-    // 2. OneDrive stored exactly those bytes. Its own size and SHA-1 say so; when it gives no hash,
-    //    the file is read back from OneDrive and compared byte for byte.
+    // 2. OneDrive stored exactly those bytes. Its own hash says so: the SHA-1, or else its quickXorHash.
+    //    Some personal accounts give neither, and their downloads fail too (seen: HTML 401 on every
+    //    download route, 12 and 13 November 2026), so then the size OneDrive reports is what we have.
     if (!problems.length) {
-      if (stored && stored.sha1) {
-        if (stored.size !== file.bytes) problems.push(`OneDrive stored ${stored.size} bytes, expected ${file.bytes}`)
-        else if (stored.sha1.toLowerCase() !== (await sha1Hex(sent))) problems.push('OneDrive\'s copy does not match the file written (SHA-1 differs)')
-      } else {
+      if (!stored) {
         problems = await verifyBackup(await deps.drive.get(file.name), file, deps.check)
+      } else if (stored.size !== file.bytes) {
+        problems.push(`OneDrive stored ${stored.size} bytes, expected ${file.bytes}`)
+      } else if (stored.sha1) {
+        if (stored.sha1.toLowerCase() !== (await sha1Hex(sent))) problems.push('OneDrive\'s copy does not match the file written (SHA-1 differs)')
+      } else if (stored.quickXor) {
+        if (stored.quickXor !== quickXorHash(sent)) problems.push('OneDrive\'s copy does not match the file written (hash differs)')
       }
     }
     if (problems.length) {
