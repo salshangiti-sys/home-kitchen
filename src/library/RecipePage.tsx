@@ -13,6 +13,7 @@ import { explain } from '../offline/readThrough'
 import CookHistory from '../history/CookHistory'
 import VersionHistory from '../history/VersionHistory'
 import FoodGroups from '../nutrition/FoodGroups'
+import PrepTemplates from '../prep/PrepTemplates'
 import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { safeHref } from './safeUrl'
@@ -222,6 +223,8 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
       )}
 
       <FoodGroups recipeId={id} canEdit={canEdit && !inTrash} />
+
+      <PrepTemplates recipeId={id} canEdit={canEdit && !inTrash} ingredientLines={doc.ingredient_groups.flatMap((g) => g.items.map((item) => item.text))} />
 
       <CookHistory recipeId={id} userId={userId} canLog={!inTrash} startLogging={startLogging} />
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { canEdit, SignIn, useAuth } from './auth'
+import NowPage from './prep/NowPage'
 import PlanPage from './plan/PlanPage'
 import RestorePage from './library/RestorePage'
 import ImportPage from './library/ImportPage'
@@ -68,6 +69,7 @@ function useBackupAlert(enabled: boolean): BackupState | null {
 const NAV: Array<{ label: string; to: string; match: Route['name'][]; editorsOnly?: boolean }> = [
   { label: 'الوصفات', to: href.library, match: ['library', 'recipe'] },
   { label: 'الخطة', to: href.plan(), match: ['plan'] },
+  { label: 'الآن', to: href.now, match: ['now'] },
   { label: 'وصفة جديدة', to: href.new, match: ['new'], editorsOnly: true },
   { label: 'استيراد', to: href.import, match: ['import'], editorsOnly: true },
   { label: 'OneNote', to: href.onenote, match: ['onenote'], editorsOnly: true },
@@ -153,6 +155,8 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return editor ? <ImportPage /> : <LibraryPage canEdit={false} />
     case 'cook':
       return <CookMode key={route.id} id={route.id} />
+    case 'now':
+      return <NowPage canEdit={editor} />
     case 'plan':
       return <PlanPage canEdit={editor} week={route.week} />
     case 'restore':

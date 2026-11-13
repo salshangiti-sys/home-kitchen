@@ -9,6 +9,7 @@ describe('parseHash', () => {
     ['#/r/salads-007/edit', { name: 'edit', id: 'salads-007' }],
     ['#/new', { name: 'new' }],
     ['#/import', { name: 'import' }],
+    ['#/now', { name: 'now' }],
     ['#/plan', { name: 'plan' }],
     ['#/plan/2026-11-14', { name: 'plan', week: '2026-11-14' }],
     ['#/plan/nonsense', { name: 'plan' }],

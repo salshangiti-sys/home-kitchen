@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { href, navigate } from '../router'
 import { Button, Notice } from '../ui'
 import { listRecipes } from '../library/api'
+import { generateTasks } from '../prep/api'
 import { FOOD_GROUPS, FOOD_GROUP_LABELS, type FoodGroup } from '../nutrition/api'
 import AddMeal from './AddMeal'
 import MealRow from './MealRow'
@@ -25,6 +26,8 @@ export interface PlanApi extends SettingsApi {
   copyWeek: typeof real.copyWeek
   setSlotGroups: typeof real.setSlotGroups
   loadRecipes: () => Promise<RecipeSummary[]>
+  // Brings the prep tasks of the week up to date after the plan changes (best effort).
+  generatePrepTasks?: (day: string) => Promise<unknown>
 }
 
 const realApi: PlanApi = {
@@ -42,6 +45,7 @@ const realApi: PlanApi = {
   savePerson: real.savePerson,
   removePerson: real.removePerson,
   loadRecipes: async () => (await listRecipes()).recipes,
+  generatePrepTasks: generateTasks,
 }
 
 interface Props {
@@ -90,6 +94,8 @@ export default function PlanPage({ week, canEdit, today = todayIso, api = realAp
     try {
       await work()
       after?.()
+      // Tasks follow the plan: a meal added, moved, skipped or removed changes its prep tasks.
+      if (canEdit) await api.generatePrepTasks?.(anyDay)?.catch(() => undefined)
       await load()
     } catch (e) {
       setError(planMessage(e))

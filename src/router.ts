@@ -9,6 +9,7 @@ export type Route =
   | { name: 'cook'; id: string }
   | { name: 'new' }
   | { name: 'plan'; week?: string }
+  | { name: 'now' }
   | { name: 'import' }
   | { name: 'restore' }
   | { name: 'trash' }
@@ -24,6 +25,7 @@ export function parseHash(hash: string): Route {
   }
   if (parts[0] === 'new') return { name: 'new' }
   if (parts[0] === 'plan') return /^\d{4}-\d{2}-\d{2}$/.test(parts[1] ?? '') ? { name: 'plan', week: parts[1] } : { name: 'plan' }
+  if (parts[0] === 'now') return { name: 'now' }
   if (parts[0] === 'import') return { name: 'import' }
   if (parts[0] === 'restore') return { name: 'restore' }
   if (parts[0] === 'trash') return { name: 'trash' }
@@ -39,6 +41,7 @@ export const href = {
   cooked: (id: string) => `#/r/${encodeURIComponent(id)}/cooked`,
   new: '#/new',
   plan: (week?: string) => (week ? `#/plan/${week}` : '#/plan'),
+  now: '#/now',
   import: '#/import',
   restore: '#/restore',
   trash: '#/trash',

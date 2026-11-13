@@ -83,6 +83,7 @@ function fake(initial: Partial<State> = {}) {
     }),
     removePerson: vi.fn(async (id: string) => void (state.people = state.people.filter((p) => p.id !== id))),
     loadRecipes: vi.fn(async () => [recipe('salads-001', 'سلطة خضراء', 'سلطات'), recipe('soups-001', 'شوربة عدس', 'شوربات')]),
+    generatePrepTasks: vi.fn(async () => ({ added: 0, updated: 0, removed: 0 })),
   }
   return { state, api }
 }
@@ -245,6 +246,26 @@ describe('planning meals', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'حذف' }))
     fireEvent.click(screen.getByRole('button', { name: 'نعم، احذفيها' }))
     expect(await screen.findByText('لا تملكين صلاحية تعديل الخطة.')).toBeTruthy()
+  })
+})
+
+describe('prep tasks follow the plan', () => {
+  it('are brought up to date after the plan changes, for an editor only', async () => {
+    const { api } = fake({ meals: [meal('a', TODAY, 'lunch', 'أرز أبيض')] })
+    show(api, true)
+    fireEvent.click(await screen.findByRole('button', { name: 'حذف' }))
+    fireEvent.click(screen.getByRole('button', { name: 'نعم، احذفيها' }))
+    await waitFor(() => expect(api.generatePrepTasks).toHaveBeenCalledWith(TODAY))
+  })
+
+  it('still show the plan when updating the tasks fails', async () => {
+    const { api } = fake({ meals: [meal('a', TODAY, 'lunch', 'أرز أبيض')] })
+    api.generatePrepTasks.mockRejectedValueOnce(new Error('boom'))
+    show(api, true)
+    fireEvent.click(await screen.findByRole('button', { name: 'حذف' }))
+    fireEvent.click(screen.getByRole('button', { name: 'نعم، احذفيها' }))
+    await waitFor(() => expect(screen.queryByText('أرز أبيض')).toBeNull())
+    expect(screen.queryByText('boom')).toBeNull()
   })
 })
 
