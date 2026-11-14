@@ -69,7 +69,7 @@ begin
 
   -- a confirmation goes with its recipe
   delete from public.recipes where id = rid;
-  select count(*) into n from public.quantity_confirmations;
+  select count(*) into n from public.quantity_confirmations where household_id = hh; -- (as the database owner this sees every household's, left by other tests)
   if n <> 0 then raise exception 'FAILED: confirmations outlived their recipe'; end if;
 
   raise notice 'QUANTITY CONFIRMATIONS PASSED';
