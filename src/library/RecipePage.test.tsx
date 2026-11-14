@@ -10,7 +10,8 @@ vi.mock('../nutrition/FoodGroups', () => ({ default: () => <p>العناصر ا�
 vi.mock('../prep/PrepTemplates', () => ({ default: () => <p>تجهيزات الوصفة</p> }))
 vi.mock('../photos/PhotoGallery', () => ({ default: () => <p>الصور</p> }))
 
-const api = vi.hoisted(() => ({ loadRecipe: vi.fn(), loadRecipePage: vi.fn(), refreshFromPage: vi.fn() }))
+const api = vi.hoisted(() => ({ loadRecipe: vi.fn(), loadRecipePage: vi.fn(), refreshFromPage: vi.fn(), loadSuggestions: vi.fn() }))
+vi.mock('../ingredients/api', async (original) => ({ ...(await original<typeof import('../ingredients/api')>()), loadSuggestions: api.loadSuggestions }))
 vi.mock('./api', async (original) => ({ ...(await original<typeof import('./api')>()), loadRecipe: api.loadRecipe }))
 vi.mock('./onenote', async (original) => ({ ...(await original<typeof import('./onenote')>()), loadRecipePage: api.loadRecipePage, refreshFromPage: api.refreshFromPage }))
 
@@ -22,6 +23,7 @@ const page: PageLink = { page_id: 'p1', section_name: 'سلطات', web_url: 'ht
 beforeEach(() => {
   api.loadRecipePage.mockResolvedValue(page)
   api.refreshFromPage.mockResolvedValue(undefined)
+  api.loadSuggestions.mockResolvedValue([])
 })
 afterEach(() => {
   cleanup()
@@ -94,5 +96,38 @@ describe('a recipe in the app', () => {
     api.loadRecipe.mockResolvedValue(loaded(SALAD, { flags: [{ id: 'f1', flag: 'method_inside_ingredients', status: 'open' }] as LoadedRecipe['flags'] }))
     render(<RecipePage id="salads-007" canEdit userId="u1" />)
     expect(await screen.findByText('الطريقة مكتوبة داخل المقادير')).toBeTruthy()
+  })
+
+  const proposal = (id: string, position: number, text: string, status: 'suggested' | 'confirmed' | 'ignored') => ({ id, recipe_id: 'salads-007', position, text, quote: null, status, source: 'method' as const })
+
+  it('shows the ingredients she confirmed in the app when the page has none, and never a waiting or ignored one', async () => {
+    api.loadRecipe.mockResolvedValue(loaded({ ...SALAD, ingredient_groups: [] }))
+    api.loadSuggestions.mockResolvedValue([proposal('1', 1, 'جزر', 'confirmed'), proposal('2', 2, 'كوسة', 'suggested'), proposal('3', 3, 'فلفل', 'ignored')])
+    render(<RecipePage id="salads-007" canEdit userId="u1" />)
+    expect(await screen.findByText('جزر')).toBeTruthy()
+    expect(screen.getByText(/أكّدتِها في التطبيق/)).toBeTruthy()
+    expect(screen.queryByText('كوسة')).toBeNull()
+    expect(screen.queryByText('فلفل')).toBeNull()
+    expect(screen.queryByText(/لا مقادير مسجّلة لهذه الوصفة بعد/)).toBeNull()
+    // the waiting one is announced, with a way to review it
+    expect(screen.getByText(/1 مقدار مقترح من نص الوصفة بانتظار تأكيدك/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'راجعيها' }).getAttribute('href')).toBe('#/ingredients')
+  })
+
+  it('announces waiting proposals instead of "no ingredients" when none is confirmed yet', async () => {
+    api.loadRecipe.mockResolvedValue(loaded({ ...SALAD, ingredient_groups: [] }))
+    api.loadSuggestions.mockResolvedValue([proposal('1', 1, 'جزر', 'suggested'), proposal('2', 2, 'كوسة', 'suggested')])
+    render(<RecipePage id="salads-007" canEdit userId="u1" />)
+    expect(await screen.findByText(/2 مقدارًا مقترحًا من نص الوصفة بانتظار تأكيدك/)).toBeTruthy()
+    expect(screen.queryByText(/لا مقادير مسجّلة لهذه الوصفة بعد/)).toBeNull()
+  })
+
+  it('uses the lines from OneNote when it has them, whatever was proposed', async () => {
+    api.loadRecipe.mockResolvedValue(loaded(SALAD))
+    api.loadSuggestions.mockResolvedValue([proposal('1', 1, 'جزر', 'confirmed'), proposal('2', 2, 'كوسة', 'suggested')])
+    render(<RecipePage id="salads-007" canEdit userId="u1" />)
+    expect(await screen.findByText('خيار مقطع')).toBeTruthy()
+    expect(screen.queryByText('جزر')).toBeNull()
+    expect(screen.queryByText(/بانتظار تأكيدك/)).toBeNull()
   })
 })

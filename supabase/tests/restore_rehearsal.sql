@@ -18,11 +18,11 @@ declare
   hh uuid;
   doc1 jsonb := '{"title":"سلطة تجربة","status":"complete","category":{"section":"سلطات","section_en":"Salads"},"sources":[{"url":"https://example.test/v","platform":"web"}],"ingredient_groups":[{"name":null,"items":[{"text":"خس"},{"text":"زيت زيتون"}]}],"steps":[{"order":1,"text":"قطّعي"}],"notes":["باردة"],"tags":{"meal_types":["lunch"],"kid_friendly":true,"custom":["سريعة"]},"onenote":{},"raw_text":"x","flags":["quantities_missing"]}';
   sat date := date '2026-11-14';
-  a text; b text; c text; fid uuid; lunch uuid; dinner uuid; p1 uuid; p2 uuid; m1 uuid; m2 uuid; t1 uuid; t2 uuid;
+  sid uuid; a text; b text; c text; fid uuid; lunch uuid; dinner uuid; p1 uuid; p2 uuid; m1 uuid; m2 uuid; t1 uuid; t2 uuid;
   b1 jsonb; b2 jsonb; b3 jsonb; exported jsonb; file_a jsonb; file_b jsonb; res jsonb; res2 jsonb;
   part text; key text; n int; log text := '';
   -- the parts the restore brings back, and the parts it leaves out on purpose
-  restored text[] := array['recipes','deleted_recipes','favorites','flags','versions','onenote_pages','cook_log','food_groups','plan_settings','people','meal_slots','week_plans','planned_meals','slot_food_groups','prep_templates','prep_tasks'];
+  restored text[] := array['recipes','deleted_recipes','favorites','flags','versions','onenote_pages','cook_log','food_groups','plan_settings','people','meal_slots','week_plans','planned_meals','slot_food_groups','prep_templates','prep_tasks','ingredient_suggestions'];
   left_out text[] := array['household','members','onenote_library','photos'];
 begin
   insert into auth.users (id) values (owner_id), (viewer_id);
@@ -68,6 +68,20 @@ begin
   perform public.add_prep_task(sat + 2, 'morning', null, 'other', 'مهمة يدوية', m1);
   perform public.add_prep_task(sat + 4, 'morning', null, 'other', 'مهمة بلا وجبة', null);
   perform public.dismiss_prep_task((select id from public.prep_tasks where planned_meal_id = m1 and kind = 'other' limit 1));
+  reset role;
+
+  -- proposed ingredients: loaded by the server, then one confirmed, one edited and ignored, one added by hand
+  perform public.load_ingredient_suggestions(jsonb_build_array(
+    jsonb_build_object('recipe_id', a, 'text', 'جزر', 'quote', 'جزر وكوسة اقطعها', 'source', 'method'),
+    jsonb_build_object('recipe_id', a, 'text', 'كوسة', 'quote', 'جزر وكوسة اقطعها', 'source', 'method'),
+    jsonb_build_object('recipe_id', b, 'text', 'قشطة', 'quote', 'قشطة وكريمة', 'source', 'notes')));
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  select s.id into sid from public.recipe_ingredient_suggestions s where s.recipe_id = a and s.text = 'جزر';
+  perform public.set_ingredient_suggestion(sid, 'confirmed');
+  select s.id into sid from public.recipe_ingredient_suggestions s where s.recipe_id = a and s.text = 'كوسة';
+  perform public.set_ingredient_suggestion(sid, 'ignored', 'كوسة صغيرة');
+  perform public.add_ingredient(b, 'ملح');
   reset role;
 
   -- a second member's own entries
@@ -154,10 +168,14 @@ begin
   select count(*) into n from public.recipes where household_id = hh;
   if n <> 0 then raise exception 'FAILED: the dry run saved % recipes', n; end if;
   if coalesce((res ->> 'recipes_created')::int, 0) < 2 then raise exception 'FAILED: the dry run did not report the recipes it would add: %', res; end if;
+  if (res ->> 'ingredient_suggestions_added')::int <> 4 then raise exception 'FAILED: the dry run should report 4 suggestion lines: %', res; end if;
+  select count(*) into n from public.recipe_ingredient_suggestions where household_id = hh;
+  if n <> 0 then raise exception 'FAILED: the dry run saved suggestion lines'; end if;
 
   -- ---- the real restore, then again ----
   res := public.restore_from_backup(file_b, false);
   if jsonb_array_length(coalesce(res -> 'errors', '[]'::jsonb)) <> 0 then raise exception 'FAILED: the restore reported errors: %', res; end if;
+  if (res ->> 'ingredient_suggestions_added')::int <> 4 then raise exception 'FAILED: the restore should add 4 suggestion lines: %', res; end if;
   res2 := public.restore_from_backup(file_b, false);
   reset role;
   b3 := public.backup_bundle(hh);
