@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ReconnectRequiredError } from './engine.ts'
+import { ReconnectRequiredError } from './errors.ts'
 import { authorizeUrl, exchangeCode, pkceChallenge, refreshTokens } from './oauth.ts'
 
 const CONFIG = { clientId: 'client-1', clientSecret: 'not-a-real-secret', redirectUri: 'https://x.supabase.co/functions/v1/ms-oauth-callback' }

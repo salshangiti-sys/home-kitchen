@@ -2,7 +2,15 @@
 
 import { parseHTML } from 'linkedom'
 import { GraphError, type PageMeta, type PatchCommand, type Place } from './graph.ts'
-import type { PageGraph } from './engine.ts'
+
+// What the fake stands in for: the OneNote calls the app makes (read pages, create pages), plus the
+// partial update the Phase 0 experiment used and the app no longer calls.
+interface PageGraph {
+  getPageMeta(pageId: string): Promise<PageMeta>
+  getPageContent(pageId: string): Promise<string>
+  createPage(sectionId: string, html: string): Promise<PageMeta>
+  patchPage(pageId: string, commands: PatchCommand[]): Promise<void>
+}
 
 interface FakePage {
   notebookId: string
