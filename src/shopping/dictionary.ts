@@ -176,3 +176,7 @@ export const DICTIONARY: Entry[] = [
   // ---- not bought
   ['ماء', 'none', ['ماء', 'مويا', 'موية', 'مويه', 'مياه', 'موية مغلية']],
 ]
+
+// The names the dictionary knows (what an unknown name can be taught to be "the same as"), in Arabic order.
+export const dictionaryNames = (): Array<{ name: string; aisle: Aisle }> =>
+  [...new Map(DICTIONARY.filter(([, aisle]) => aisle !== 'none').map(([name, aisle]) => [name, { name, aisle }])).values()].sort((a, b) => a.name.localeCompare(b.name, 'ar'))

@@ -11,6 +11,7 @@ describe('parseHash', () => {
     ['#/import', { name: 'import' }],
     ['#/now', { name: 'now' }],
     ['#/shopping', { name: 'shopping' }],
+    ['#/dictionary', { name: 'dictionary' }],
     ['#/shopping/2026-11-14', { name: 'shopping', week: '2026-11-14' }],
     ['#/shopping/oops', { name: 'shopping' }],
     ['#/plan', { name: 'plan' }],

@@ -16,6 +16,16 @@ export interface Identified {
 
 const stripGlue = (name: string) => name.replace(/\s+/g, ' ').trim()
 
+// What she taught the dictionary (see lessons.ts): a cleaned name is either "the same as" a name the
+// dictionary knows, or an item of its own in a chosen aisle. They win over the dictionary.
+export interface Lesson {
+  name_key: string
+  target: string | null
+  aisle: Exclude<Aisle, 'none'>
+}
+let LESSONS = new Map<string, Lesson>()
+export const setLessons = (lessons: Lesson[]) => void (LESSONS = new Map(lessons.map((l) => [l.name_key, l])))
+
 // alias (cleaned the way line names are) -> entry
 const ALIASES = new Map<string, { name: string; aisle: Aisle }>()
 for (const [name, aisle, aliases] of DICTIONARY) {
@@ -65,6 +75,14 @@ export function identify(line: string): Identified {
   const parsed = parseIngredient(line)
   const name = stripGlue(cleanName(parsed.item))
   const sentence = NOT_INGREDIENT.test(line) || looksLikeSentence(line)
+  const lesson = name ? LESSONS.get(name) : undefined
+  if (lesson) {
+    const target = lesson.target ? stripGlue(cleanName(lesson.target)) : ''
+    const same = target ? ALIASES.get(target) : undefined
+    if (same) return { key: same.name, label: same.name, aisle: same.aisle, known: true, parsed, sentence }
+    // an item of its own (or "the same as" a name that is not in the dictionary: then that name is the item)
+    return { key: target || name, label: lesson.target ?? (stripGlue(parsed.item.replace(/\([^()]*\)/g, ' ')) || line.trim()), aisle: lesson.aisle, known: true, parsed, sentence }
+  }
   const hit = name ? lookup(name) : null
   if (hit) return { key: hit.name, label: hit.name, aisle: hit.aisle, known: true, parsed, sentence }
   const aisle = GUESS.find(([pattern]) => pattern.test(name))?.[1] ?? 'other'
