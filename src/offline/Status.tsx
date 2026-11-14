@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { Button, Notice } from '../ui'
+import { useOutbox } from './useOutbox'
 
 export function useOnline(): boolean {
   const [online, setOnline] = useState(() => navigator.onLine)
@@ -21,6 +22,32 @@ export function useOnline(): boolean {
 export function OfflineNotice() {
   if (useOnline()) return null
   return <Notice>لا يوجد اتصال بالإنترنت. تظهر آخر نسخة محفوظة من الوصفات، ولا يمكن التعديل أو قراءة OneNote حتى يعود الاتصال.</Notice>
+}
+
+// Changes made with no connection that have not reached the server yet, and those the server refused.
+export function OutboxNotice() {
+  const { waiting, failures, sendNow, dismiss } = useOutbox()
+  const online = useOnline()
+  return (
+    <>
+      {waiting > 0 && (
+        <Notice>
+          <span className="flex flex-wrap items-center gap-2">
+            <span>{waiting === 1 ? 'تغيير واحد لم يُرسل بعد' : `${waiting} تغييرات لم تُرسل بعد`}. يُرسل تلقائيًا حين يعود الاتصال.</span>
+            {online && <Button kind="plain" onClick={() => void sendNow()}>أرسلي الآن</Button>}
+          </span>
+        </Notice>
+      )}
+      {failures.map((f) => (
+        <Notice key={f.id} tone="error">
+          <span className="flex flex-wrap items-center gap-2">
+            <span dir="auto">تعذّر إرسال تغيير قمتِ به دون إنترنت ({f.label}): {f.message}</span>
+            <Button kind="plain" onClick={() => void dismiss(f.id)}>تم</Button>
+          </span>
+        </Notice>
+      ))}
+    </>
+  )
 }
 
 interface InstallPrompt extends Event {

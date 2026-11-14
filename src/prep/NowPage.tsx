@@ -4,6 +4,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Badge, Button, Notice } from '../ui'
+import { enqueue, pending, subscribe, type Op } from '../offline/outbox'
+import { looksOffline } from '../offline/readThrough'
 import { dayLabel, todayIso, weekdayName } from '../plan/dates'
 import {
   KIND_LABELS,
@@ -14,9 +16,12 @@ import {
   generateTasks,
   groupNow,
   loadNow,
+  overlayTicks,
   prepMessage,
   setDone,
   shortTime,
+  tickKey,
+  TICK_KIND,
   updateTask,
   type NowData,
   type PrepTiming,
@@ -35,20 +40,40 @@ export interface NowApi {
 
 const real: NowApi = { loadNow, generateTasks, setDone, addTask, updateTask, dismissTask }
 
+// Where changes made with no connection wait (the app's own outbox unless a test brings another).
+export interface Outbox {
+  enqueue: (kind: string, key: string, args: Record<string, unknown>) => Promise<void>
+  pending: () => Promise<Op[]>
+  subscribe: (listener: (event: 'queued' | 'flushed' | 'failed') => void) => () => void
+}
+const realOutbox: Outbox = { enqueue, pending, subscribe }
+
 interface Props {
   canEdit: boolean
   today?: () => string
   api?: NowApi
+  outbox?: Outbox
 }
 
-export default function NowPage({ canEdit, today = todayIso, api = real }: Props) {
+export default function NowPage({ canEdit, today = todayIso, api = real, outbox = realOutbox }: Props) {
   const now = today()
   const [data, setData] = useState<NowData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<string | 'new' | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [waiting, setWaiting] = useState<Set<string>>(new Set())
   const synced = useRef(false)
+
+  // What was read, with the ticks that have not been sent yet put back on top.
+  const show = useCallback(
+    async (read: NowData) => {
+      const { tasks, waiting: ids } = overlayTicks(read.tasks, await outbox.pending())
+      setWaiting(ids)
+      setData({ ...read, tasks })
+    },
+    [outbox],
+  )
 
   const load = useCallback(async () => {
     try {
@@ -57,16 +82,19 @@ export default function NowPage({ canEdit, today = todayIso, api = real }: Props
         synced.current = true
         await api.generateTasks(now).catch(() => undefined)
       }
-      setData(await api.loadNow(now))
+      await show(await api.loadNow(now))
     } catch (e) {
       setData((current) => current)
       setError(prepMessage(e))
     }
-  }, [api, canEdit, now])
+  }, [api, canEdit, now, show])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  // When the waiting changes have been sent, read the page again (so it shows what the server has).
+  useEffect(() => outbox.subscribe((event) => event !== 'queued' && void load()), [outbox, load])
 
   const run = async (work: () => Promise<unknown>) => {
     setBusy(true)
@@ -75,9 +103,30 @@ export default function NowPage({ canEdit, today = todayIso, api = real }: Props
       await work()
       setEditing(null)
       setConfirming(null)
-      setData(await api.loadNow(now))
+      await show(await api.loadNow(now))
     } catch (e) {
       setError(prepMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // A tick goes to the server at once. With no connection it waits in the outbox, and the task shows
+  // as done with "لم تُرسل بعد" until the server has it.
+  const tick = async (task: Task, done: boolean) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.setDone(task.id, done)
+      await show(await api.loadNow(now))
+    } catch (e) {
+      if (looksOffline(e)) {
+        await outbox.enqueue(TICK_KIND, tickKey(task.id), { id: task.id, done })
+        setWaiting((ids) => new Set(ids).add(task.id))
+        setData((current) => current && { ...current, tasks: current.tasks.map((t) => (t.id === task.id ? { ...t, done_at: done ? new Date().toISOString() : null } : t)) })
+      } else {
+        setError(prepMessage(e))
+      }
     } finally {
       setBusy(false)
     }
@@ -97,7 +146,8 @@ export default function NowPage({ canEdit, today = todayIso, api = real }: Props
       busy={busy}
       editing={editing === task.id}
       confirming={confirming === task.id}
-      onTick={(done) => void run(() => api.setDone(task.id, done))}
+      unsent={waiting.has(task.id)}
+      onTick={(done) => void tick(task, done)}
       onEdit={() => setEditing(task.id)}
       onCancel={() => { setEditing(null); setConfirming(null) }}
       onSave={(input) => void run(() => api.updateTask(task.id, input))}
@@ -146,13 +196,14 @@ export default function NowPage({ canEdit, today = todayIso, api = real }: Props
   )
 }
 
-function TaskRow({ task, meal, canEdit, busy, editing, confirming, onTick, onEdit, onCancel, onSave, onAskDismiss, onDismiss }: {
+function TaskRow({ task, meal, canEdit, busy, editing, confirming, unsent, onTick, onEdit, onCancel, onSave, onAskDismiss, onDismiss }: {
   task: Task
   meal?: { title: string; day: string; slot: string }
   canEdit: boolean
   busy: boolean
   editing: boolean
   confirming: boolean
+  unsent: boolean
   onTick: (done: boolean) => void
   onEdit: () => void
   onCancel: () => void
@@ -176,6 +227,7 @@ function TaskRow({ task, meal, canEdit, busy, editing, confirming, onTick, onEdi
           <span dir="auto" className={`leading-relaxed ${done ? 'text-muted line-through' : 'font-medium'}`}>{task.body}</span>
           <span className="flex flex-wrap items-center gap-2 text-xs text-muted">
             <Badge tone="accent">{KIND_LABELS[task.kind]}</Badge>
+            {unsent && <Badge tone="warn">لم تُرسل بعد</Badge>}
             <span>{task.timing === 'at_time' ? `الساعة ${shortTime(task.at_time)}` : TIMING_LABELS[task.timing]}</span>
             {meal && <span dir="auto">لوجبة: {meal.title} ({weekdayName(meal.day)}{meal.slot ? ` · ${meal.slot}` : ''})</span>}
           </span>

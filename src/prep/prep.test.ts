@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupNow, prepMessage, shortTime, sortTasks, suggestPrep, type Task } from './api'
+import { groupNow, overlayTicks, prepMessage, shortTime, sortTasks, suggestPrep, type Task } from './api'
 
 const task = (id: string, day: string, timing: Task['timing'], at_time: string | null = null, extra: Partial<Task> = {}): Task => ({
   id,
@@ -102,5 +102,23 @@ describe('helpers', () => {
     expect(prepMessage(new Error('bad_timing: x'))).toContain('وقتًا محددًا')
     expect(prepMessage(new Error('not allowed to change the plan'))).toContain('صلاحية')
     expect(prepMessage(new Error('Failed to fetch'))).toContain('الإنترنت')
+  })
+})
+
+describe('ticks waiting to be sent (overlayTicks)', () => {
+  const open = (id: string) => ({ id, planned_meal_id: null, day: '2026-11-14', timing: 'morning' as const, at_time: null, kind: 'other' as const, body: id, from_template: false, done_at: null, done_by: null, position: 1 })
+  const op = (id: string, done: boolean, at: string) => ({ id: `op-${id}`, key: `task_done:${id}`, kind: 'task_done', args: { id, done }, at })
+
+  it('puts waiting ticks on top of what was read, and says which tasks are waiting', () => {
+    const tasks = [open('a'), { ...open('b'), done_at: '2026-11-14T07:00:00Z' }, open('c')]
+    const { tasks: shown, waiting } = overlayTicks(tasks, [op('a', true, '2026-11-14T09:00:00Z'), op('b', false, '2026-11-14T09:05:00Z')])
+    expect(shown.map((t) => t.done_at)).toEqual(['2026-11-14T09:00:00Z', null, null])
+    expect([...waiting].sort()).toEqual(['a', 'b'])
+  })
+
+  it('ignores other kinds of waiting changes and leaves the tasks untouched without any', () => {
+    const tasks = [open('a')]
+    expect(overlayTicks(tasks, []).tasks).toEqual(tasks)
+    expect(overlayTicks(tasks, [{ id: 'x', key: 'k', kind: 'shopping', args: { id: 'a', done: true }, at: 'now' }]).waiting.size).toBe(0)
   })
 })

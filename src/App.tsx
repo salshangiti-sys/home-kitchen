@@ -9,7 +9,8 @@ import LibraryPage from './library/LibraryPage'
 import CookMode from './cook/CookMode'
 import { backupState, loadBackupRuns, needsAttention, type BackupState } from './library/backupStatus'
 import { checkIfDue, loadLibrary } from './library/onenote'
-import { InstallHint, OfflineNotice } from './offline/Status'
+import { InstallHint, OfflineNotice, OutboxNotice } from './offline/Status'
+import { useFlushWhenOnline } from './offline/useOutbox'
 import { Notice } from './ui'
 import OneNotePage from './library/OneNotePage'
 import TrashPage from './library/TrashPage'
@@ -85,6 +86,7 @@ export default function App() {
   const cooking = route.name === 'cook'
   useNotebookCheck(auth.session != null && editor)
   const backupAlert = useBackupAlert(auth.session != null && editor)
+  useFlushWhenOnline(auth.ready && auth.session != null)
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-5 print:max-w-none print:px-0 print:py-0">
@@ -129,7 +131,7 @@ export default function App() {
       )}
 
       <main className="flex flex-col gap-6 pb-10">
-        {auth.session && <div className="print:hidden"><OfflineNotice /></div>}
+        {auth.session && <div className="flex flex-col gap-3 print:hidden"><OfflineNotice /><OutboxNotice /></div>}
         {backupAlert && !cooking && (
           <div className="print:hidden">
             <Notice tone="error">
