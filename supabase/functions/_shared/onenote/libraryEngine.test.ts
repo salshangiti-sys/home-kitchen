@@ -5,7 +5,6 @@ import {
   checkLibrary,
   connectLibrary,
   createRecipePage,
-  linkImported,
   linkPage,
   refreshRecipe,
   type Library,
@@ -62,12 +61,6 @@ class MemoryStore implements LibraryStore {
   }
   async removeUnlinked(pageId: string) {
     this.unlinked = this.unlinked.filter((page) => page.pageId !== pageId)
-  }
-  async importedWithoutLink(limit: number) {
-    return [...this.recipes.values()]
-      .filter(({ doc }) => doc.onenote?.page_id && !this.pageLinks.has(doc.id))
-      .slice(0, limit)
-      .map(({ doc }) => ({ recipeId: doc.id, pageId: doc.onenote!.page_id! }))
   }
 }
 
@@ -242,20 +235,6 @@ describe('the recipe notebook is read and created in, never edited', () => {
     // Reading the new page back changes nothing.
     expect(await refreshRecipe(deps, created.recipeId)).toMatchObject({ result: 'unchanged' })
     await expect(createRecipePage(deps, { doc: NEW_DOC, sectionName: 'غير موجود', blank: true })).rejects.toMatchObject({ code: 'unknown_section' })
-  })
-
-  it('links imported recipes by their page_id, marking the ones not found', async () => {
-    await connectLibrary(deps, 'nb-real')
-    const created = await onenote.createPage('sec-rice', HAND_MADE)
-    const outside = await onenote.createPage('sec-other', HAND_MADE)
-    for (const [id, pageId] of [['rice-001', created.id], ['rice-002', 'gone'], ['rice-003', outside.id]]) {
-      store.recipes.set(id, { doc: { ...NEW_DOC, id, onenote: { notebook: 'وصفاتي', section: 'أرز', page_id: pageId, created: null } }, version: 1 })
-    }
-    expect(await linkImported(deps, 2)).toEqual({ linked: 1, missing: 1, remaining: true })
-    expect(await linkImported(deps, 2)).toEqual({ linked: 0, missing: 1, remaining: false })
-    expect((await store.link('rice-001'))!.readStatus).toBe('ok')
-    expect((await store.link('rice-002'))!.readStatus).toBe('missing')
-    expect((await store.link('rice-003'))!.readStatus).toBe('missing')
   })
 
   it('never calls anything but reads and page creation', async () => {

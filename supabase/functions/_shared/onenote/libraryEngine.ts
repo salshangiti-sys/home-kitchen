@@ -9,7 +9,6 @@
 //   yet (for the owner to add or link), and refresh the recipes read longest ago.
 // - add / link: make a recipe from an unlisted page, or link a page to an existing recipe (for a
 //   page that moved, which gives it a new id).
-// - linkImported: link recipes imported from recipes.json to their pages by page_id.
 // - createPage: create a new page from the app with the template, once.
 //
 // Every function takes a ReadCreateGraph, which has no way to change or delete a page.
@@ -79,8 +78,6 @@ export interface LibraryStore {
   saveLink(link: PageLink): Promise<void>
   replaceUnlinked(pages: UnlinkedPage[]): Promise<void>
   removeUnlinked(pageId: string): Promise<void>
-  // Recipes whose document names a OneNote page_id but that have no page link yet.
-  importedWithoutLink(limit: number): Promise<Array<{ recipeId: string; pageId: string }>>
 }
 
 export class LibraryError extends Error {
@@ -276,45 +273,6 @@ export async function linkPage(deps: LibraryDeps, pageId: string, recipeId: stri
   await store.saveLink(linkFrom(recipeId, meta, library, { createdByApp: previous?.createdByApp ?? false }))
   await store.removeUnlinked(pageId)
   return refreshRecipe(deps, recipeId)
-}
-
-// Links recipes imported from recipes.json to their pages, using the page_id in each record.
-// Pages that are gone or outside the notebook are linked as missing, so they show up for review.
-export async function linkImported(deps: LibraryDeps, limit = 25): Promise<{ linked: number; missing: number; remaining: boolean }> {
-  const { graph, store } = deps
-  let library = await requireLibrary(store)
-  const pending = await store.importedWithoutLink(limit + 1)
-  let linked = 0
-  let missing = 0
-  for (const { recipeId, pageId } of pending.slice(0, limit)) {
-    try {
-      const meta = await graph.getPageMeta(pageId)
-      const holding = await libraryHolding(deps, library, meta)
-      if (!holding) throw new LibraryError('outside the recipe library', 'wrong_notebook')
-      library = holding
-      await store.saveLink(linkFrom(recipeId, meta, library))
-      await store.removeUnlinked(pageId)
-      linked += 1
-    } catch (error) {
-      if (!is404(error) && !(error instanceof LibraryError)) throw error
-      await store.saveLink({
-        recipeId,
-        pageId,
-        notebookId: library.notebookId,
-        sectionId: null,
-        sectionName: null,
-        pageTitle: null,
-        webUrl: null,
-        clientUrl: null,
-        createdByApp: false,
-        readStatus: 'missing',
-        lastReadAt: null,
-        lastError: 'the page_id from the import was not found in the recipe notebook',
-      })
-      missing += 1
-    }
-  }
-  return { linked, missing, remaining: pending.length > limit }
 }
 
 // Creates a new page in the recipe notebook for a recipe written in the app, or an empty page
