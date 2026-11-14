@@ -3,6 +3,7 @@ import { canEdit, SignIn, useAuth } from './auth'
 import NowPage from './prep/NowPage'
 import PrintPage from './print/PrintPage'
 import ReviewPage from './ingredients/ReviewPage'
+import ShoppingPage from './shopping/ShoppingPage'
 import PlanPage from './plan/PlanPage'
 import RestorePage from './library/RestorePage'
 import ImportPage from './library/ImportPage'
@@ -73,6 +74,7 @@ const NAV: Array<{ label: string; to: string; match: Route['name'][]; editorsOnl
   { label: 'الوصفات', to: href.library, match: ['library', 'recipe'] },
   { label: 'الخطة', to: href.plan(), match: ['plan'] },
   { label: 'الآن', to: href.now, match: ['now'] },
+  { label: 'المقاضي', to: href.shopping(), match: ['shopping'] },
   { label: 'المقادير', to: href.ingredients, match: ['ingredients'], editorsOnly: true },
   { label: 'استيراد', to: href.import, match: ['import'], editorsOnly: true },
   { label: 'OneNote', to: href.onenote, match: ['onenote'], editorsOnly: true },
@@ -163,10 +165,12 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return <CookMode key={route.id} id={route.id} />
     case 'now':
       return <NowPage canEdit={editor} />
+    case 'shopping':
+      return <ShoppingPage key={route.week ?? 'this'} canEdit={editor} week={route.week} />
     case 'ingredients':
       return <ReviewPage canEdit={editor} />
     case 'print':
-      return <PrintPage week={route.week} withTasks={route.tasks} />
+      return <PrintPage week={route.week} withTasks={route.tasks} withShopping={route.shopping === true} />
     case 'plan':
       return <PlanPage canEdit={editor} week={route.week} />
     case 'restore':

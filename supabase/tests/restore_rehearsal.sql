@@ -22,7 +22,7 @@ declare
   b1 jsonb; b2 jsonb; b3 jsonb; exported jsonb; file_a jsonb; file_b jsonb; res jsonb; res2 jsonb;
   part text; key text; n int; log text := '';
   -- the parts the restore brings back, and the parts it leaves out on purpose
-  restored text[] := array['recipes','deleted_recipes','favorites','flags','versions','onenote_pages','cook_log','food_groups','plan_settings','people','meal_slots','week_plans','planned_meals','slot_food_groups','prep_templates','prep_tasks','ingredient_suggestions'];
+  restored text[] := array['recipes','deleted_recipes','favorites','flags','versions','onenote_pages','cook_log','food_groups','plan_settings','people','meal_slots','week_plans','planned_meals','slot_food_groups','prep_templates','prep_tasks','ingredient_suggestions','shopping_marks','pantry_items'];
   left_out text[] := array['household','members','onenote_library','photos'];
 begin
   insert into auth.users (id) values (owner_id), (viewer_id);
@@ -82,6 +82,12 @@ begin
   select s.id into sid from public.recipe_ingredient_suggestions s where s.recipe_id = a and s.text = 'كوسة';
   perform public.set_ingredient_suggestion(sid, 'ignored', 'كوسة صغيرة');
   perform public.add_ingredient(b, 'ملح');
+  -- the shopping list's marks (one of each kind) and what is kept at home
+  perform public.set_shopping_mark(sat, 'جزر', 'bought');
+  perform public.set_shopping_mark(sat, 'ملح', 'have');
+  perform public.add_shopping_item(sat, 'حفاضات', 'حفاضات');
+  perform public.set_pantry_item('زيت', 'زيت', true);
+  perform public.set_pantry_item('أرز', 'أرز', true);
   reset role;
 
   -- a second member's own entries
@@ -136,6 +142,8 @@ begin
   delete from public.plan_settings where household_id = hh;
   delete from public.prep_tasks where household_id = hh;
   delete from public.recipes where household_id = hh;
+  delete from public.shopping_marks where household_id = hh;
+  delete from public.pantry_items where household_id = hh;
   b2 := public.backup_bundle(hh);
   foreach part in array restored loop
     n := case jsonb_typeof(b2 -> part) when 'array' then jsonb_array_length(b2 -> part) when 'object' then 1 else 0 end;
@@ -171,11 +179,15 @@ begin
   if (res ->> 'ingredient_suggestions_added')::int <> 4 then raise exception 'FAILED: the dry run should report 4 suggestion lines: %', res; end if;
   select count(*) into n from public.recipe_ingredient_suggestions where household_id = hh;
   if n <> 0 then raise exception 'FAILED: the dry run saved suggestion lines'; end if;
+  if (res ->> 'shopping_marks_added')::int <> 3 or (res ->> 'pantry_items_added')::int <> 2 then raise exception 'FAILED: the dry run should report 3 marks and 2 pantry items: %', res; end if;
+  select count(*) into n from public.shopping_marks where household_id = hh;
+  if n <> 0 then raise exception 'FAILED: the dry run saved shopping marks'; end if;
 
   -- ---- the real restore, then again ----
   res := public.restore_from_backup(file_b, false);
   if jsonb_array_length(coalesce(res -> 'errors', '[]'::jsonb)) <> 0 then raise exception 'FAILED: the restore reported errors: %', res; end if;
   if (res ->> 'ingredient_suggestions_added')::int <> 4 then raise exception 'FAILED: the restore should add 4 suggestion lines: %', res; end if;
+  if (res ->> 'shopping_marks_added')::int <> 3 or (res ->> 'pantry_items_added')::int <> 2 then raise exception 'FAILED: the restore should add 3 marks and 2 pantry items: %', res; end if;
   res2 := public.restore_from_backup(file_b, false);
   reset role;
   b3 := public.backup_bundle(hh);
