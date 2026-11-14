@@ -47,6 +47,9 @@ jobs:
       - name: Suggested ingredients
         run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/ingredient_suggestions.sql
 
+      - name: Shopping list (marks and pantry)
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/shopping_list.sql
+
       - name: Linking recipes to OneNote pages by title
         run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/link_pages_by_title.sql
 

@@ -9,17 +9,21 @@ import * as plan from '../plan/api'
 import { dayLabel, isIsoDate, todayIso, weekRange, weekdayName } from '../plan/dates'
 import * as prep from '../prep/api'
 import { buildPrintWeek, type PrintDay } from './model'
+import { loadShopping } from '../shopping/api'
+import { buildShoppingList, plannedRecipes, type ShoppingList } from '../shopping/model'
 
 export interface PrintApi {
   loadWeek: typeof plan.loadWeek
   loadWeekTasks: typeof prep.loadWeekTasks
+  loadShopping?: typeof loadShopping
 }
 
-const realApi: PrintApi = { loadWeek: plan.loadWeek, loadWeekTasks: prep.loadWeekTasks }
+const realApi: PrintApi = { loadWeek: plan.loadWeek, loadWeekTasks: prep.loadWeekTasks, loadShopping }
 
 interface Props {
   week?: string
   withTasks: boolean
+  withShopping?: boolean
   today?: () => string
   api?: PrintApi
   print?: () => void
@@ -51,17 +55,19 @@ function Tasks({ day }: { day: PrintDay }) {
   )
 }
 
-export default function PrintPage({ week, withTasks, today = todayIso, api = realApi, print = () => window.print() }: Props) {
+export default function PrintPage({ week, withTasks, withShopping = false, today = todayIso, api = realApi, print = () => window.print() }: Props) {
   const anyDay = isIsoDate(week) ? week : today()
-  const [data, setData] = useState<{ week: plan.WeekData; tasks: prep.NowData | null } | null>(null)
+  const [data, setData] = useState<{ week: plan.WeekData; tasks: prep.NowData | null; shop: ShoppingList | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [taskError, setTaskError] = useState<string | null>(null)
+  const [shopError, setShopError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setData(null)
     setError(null)
     setTaskError(null)
+    setShopError(null)
     void (async () => {
       try {
         const weekData = await api.loadWeek(anyDay)
@@ -73,7 +79,16 @@ export default function PrintPage({ week, withTasks, today = todayIso, api = rea
             if (!cancelled) setTaskError(prep.prepMessage(e))
           }
         }
-        if (!cancelled) setData({ week: weekData, tasks })
+        let shop: ShoppingList | null = null
+        if (withShopping && api.loadShopping) {
+          try {
+            const found = await api.loadShopping(weekData.weekStart, plannedRecipes(weekData.meals))
+            shop = buildShoppingList({ meals: weekData.meals, recipes: found.recipes, marks: found.marks, pantry: found.pantry })
+          } catch (e) {
+            if (!cancelled) setShopError(plan.planMessage(e))
+          }
+        }
+        if (!cancelled) setData({ week: weekData, tasks, shop })
       } catch (e) {
         if (!cancelled) setError(plan.planMessage(e))
       }
@@ -81,7 +96,7 @@ export default function PrintPage({ week, withTasks, today = todayIso, api = rea
     return () => {
       cancelled = true
     }
-  }, [api, anyDay, withTasks])
+  }, [api, anyDay, withTasks, withShopping])
 
   const model = useMemo(
     () => (data ? buildPrintWeek({ weekStart: data.week.weekStart, slots: data.week.slots, people: data.week.people, meals: data.week.meals, tasks: data.tasks?.tasks ?? null, taskMeals: data.tasks?.meals }) : null),
@@ -92,15 +107,17 @@ export default function PrintPage({ week, withTasks, today = todayIso, api = rea
 
   const weekStart = data.week.weekStart
   const nothing = data.week.meals.every((m) => m.status === 'skipped')
-  const showingTasks = withTasks && data.tasks !== null
+  const showingTasks = withTasks && !withShopping && data.tasks !== null
+  const shop = withShopping ? data.shop : null
 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 print:hidden">
         <h2 className="text-2xl font-bold">طباعة الخطة</h2>
         <div className="flex flex-wrap gap-2">
-          <LinkButton href={href.print(weekStart, false)} kind={withTasks ? 'plain' : 'primary'}>الوجبات فقط</LinkButton>
-          <LinkButton href={href.print(weekStart, true)} kind={withTasks ? 'primary' : 'plain'}>الوجبات مع التجهيز</LinkButton>
+          <LinkButton href={href.print(weekStart, false)} kind={withTasks || withShopping ? 'plain' : 'primary'}>الوجبات فقط</LinkButton>
+          <LinkButton href={href.print(weekStart, true)} kind={withTasks && !withShopping ? 'primary' : 'plain'}>الوجبات مع التجهيز</LinkButton>
+          <LinkButton href={href.print(weekStart, false, true)} kind={withShopping ? 'primary' : 'plain'}>الوجبات مع المقاضي</LinkButton>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={print}>اطبعي</Button>
@@ -108,6 +125,7 @@ export default function PrintPage({ week, withTasks, today = todayIso, api = rea
         </div>
         <p className="text-sm text-muted">لحفظها ملفًّا: اختاري «حفظ كـ PDF» من نافذة الطباعة.</p>
         {error && <Notice tone="error">{error}</Notice>}
+        {shopError && <Notice tone="error">تعذّر تحميل المقاضي ({shopError})، فالصفحة أدناه بالوجبات فقط.</Notice>}
         {taskError && <Notice tone="error">تعذّر تحميل مهام التجهيز ({taskError})، فالصفحة أدناه بالوجبات فقط.</Notice>}
         {nothing && <Notice>لا وجبات في هذا الأسبوع بعد.</Notice>}
       </div>
@@ -159,6 +177,31 @@ export default function PrintPage({ week, withTasks, today = todayIso, api = rea
             {showingTasks && <Tasks day={day} />}
           </section>
         ))}
+        {shop && (
+          <section aria-label="المقاضي" className="rounded-xl border border-line p-3">
+            <h3 className="text-lg font-semibold">المقاضي</h3>
+            {shop.toBuy.length === 0 ? (
+              <p className="text-sm text-muted">لا شيء للشراء.</p>
+            ) : (
+              <div className="mt-1 flex flex-col gap-3">
+                {shop.toBuy.map((group) => (
+                  <div key={group.aisle} className="break-inside-avoid">
+                    <h4 className="text-sm font-semibold">{group.label}</h4>
+                    <ul className="mt-1 flex flex-col gap-1">
+                      {group.items.map((item) => (
+                        <li key={item.key} className="flex items-start gap-2">
+                          <Box done={false} />
+                          <span dir="auto">{item.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+            {shop.noIngredients.length > 0 && <p className="mt-2 text-sm text-muted">بلا مقادير مسجّلة (لم تدخل القائمة): {shop.noIngredients.join('، ')}.</p>}
+          </section>
+        )}
         <footer className="text-xs text-muted">طُبعت يوم {weekdayName(today())} {dayLabel(today())}</footer>
       </article>
     </div>

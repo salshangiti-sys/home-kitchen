@@ -127,7 +127,8 @@ export default function PlanPage({ week, canEdit, today = todayIso, api = realAp
       </div>
 
       {!empty && (
-        <div>
+        <div className="flex flex-wrap gap-2">
+          <LinkButton href={href.shopping(data.weekStart)}>مقاضي الأسبوع</LinkButton>
           <LinkButton href={href.print(data.weekStart, false)}>طباعة الأسبوع / PDF</LinkButton>
         </div>
       )}

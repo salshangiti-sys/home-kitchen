@@ -72,6 +72,8 @@ describe('print routes', () => {
     expect(parseHash('#/print/2026-11-14/tasks')).toEqual({ name: 'print', week: '2026-11-14', tasks: true })
     expect(href.print('2026-11-14', true)).toBe('#/print/2026-11-14/tasks')
     expect(href.print(undefined, false)).toBe('#/print')
+    expect(parseHash('#/print/2026-11-14/shopping')).toEqual({ name: 'print', week: '2026-11-14', tasks: false, shopping: true })
+    expect(href.print('2026-11-14', false, true)).toBe('#/print/2026-11-14/shopping')
   })
 })
 
@@ -127,6 +129,30 @@ describe('the print page', () => {
   it('still prints the meals when the tasks cannot be loaded, and says so', async () => {
     render(<PrintPage week={WEEK} withTasks api={api({ meals: [meal('a', '2026-11-14', 'lunch', 'كبسة')], tasksFail: true })} today={() => WEEK} />)
     await waitFor(() => expect(screen.getByText(/تعذّر تحميل مهام التجهيز/)).toBeTruthy())
+    expect(screen.getByText('كبسة')).toBeTruthy()
+  })
+
+  it('adds the shopping list when asked: what is still to buy, by aisle, and the recipes with no ingredients', async () => {
+    const a = api({ meals: [meal('a', '2026-11-14', 'lunch', 'شوربة', { recipe_id: 'soup' }), meal('b', '2026-11-15', 'lunch', 'وصفة فارغة', { recipe_id: 'empty' })] })
+    a.loadShopping = vi.fn(async () => ({
+      recipes: { soup: { title: 'شوربة', lines: ['٢ بصلة', 'ملح'] }, empty: { title: 'وصفة فارغة', lines: [] } },
+      marks: [{ key: 'بصل', label: null, status: 'bought' as const, is_manual: false }],
+      pantry: [],
+    }))
+    render(<PrintPage week={WEEK} withTasks={false} withShopping api={a} today={() => WEEK} />)
+    const shop = await screen.findByRole('region', { name: 'المقاضي' })
+    expect(within(shop).getByText('ملح')).toBeTruthy()
+    expect(within(shop).queryByText('بصل')).toBeNull() // already bought: not printed
+    expect(within(shop).getByText(/وصفة فارغة/)).toBeTruthy()
+    expect(a.loadWeekTasks).not.toHaveBeenCalled()
+    expect(screen.getByRole('link', { name: 'الوجبات مع المقاضي' }).getAttribute('href')).toBe('#/print/2026-11-14/shopping')
+  })
+
+  it('still prints the meals when the shopping list cannot be loaded, and says so', async () => {
+    const a = api({ meals: [meal('a', '2026-11-14', 'lunch', 'كبسة')] })
+    a.loadShopping = vi.fn(async () => { throw new Error('boom') })
+    render(<PrintPage week={WEEK} withTasks={false} withShopping api={a} today={() => WEEK} />)
+    await waitFor(() => expect(screen.getByText(/تعذّر تحميل المقاضي/)).toBeTruthy())
     expect(screen.getByText('كبسة')).toBeTruthy()
   })
 
