@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { backupState, formatBytes, needsAttention, photoLine, STALE_AFTER_MS, type BackupRun } from './backupStatus'
+import { backupFileName, backupState, buildBackupFile, formatBytes, needsAttention, photoLine, STALE_AFTER_MS, usageLines, type BackupRun } from './backupStatus'
+import { parseBackup } from './restoreBackup'
 
 const NOW = Date.parse('2026-11-12T10:00:00Z')
 const run = (hoursAgo: number, over: Partial<BackupRun> = {}): BackupRun => ({
@@ -76,5 +77,51 @@ describe('the photo line', () => {
     expect(photoLine(failed)).toMatchObject({ warn: true })
     expect(photoLine(failed)?.text).toContain('OneDrive is full')
     expect(backupState([failed], NOW).kind).toBe('ok')
+  })
+})
+
+describe('downloading the full backup', () => {
+  it('names the file like the nightly ones (UTC)', () => {
+    expect(backupFileName(new Date('2026-11-14T09:05:00Z'))).toBe('hk-backup-2026-11-14-0905.json')
+  })
+
+  it('builds the same file the nightly job writes: format, version, counts, then every part', () => {
+    const file = buildBackupFile(
+      { household: { id: 'h' }, recipes: [{}, {}], deleted_recipes: [{}], favorites: [], flags: [{}], versions: [{}, {}, {}], onenote_pages: [], plan_settings: { week_start_dow: 6 } },
+      new Date('2026-11-14T09:05:00Z'),
+    )
+    expect(file).toMatchObject({
+      format: 'home-kitchen-backup',
+      version: 1,
+      created_at: '2026-11-14T09:05:00.000Z',
+      counts: { recipes: 2, deleted_recipes: 1, favorites: 0, flags: 1, versions: 3, onenote_pages: 0 },
+      plan_settings: { week_start_dow: 6 },
+    })
+    expect(Object.keys(file).slice(0, 4)).toEqual(['format', 'version', 'created_at', 'counts'])
+  })
+
+  it('can be read back by the restore page', () => {
+    const text = JSON.stringify(buildBackupFile({ recipes: [{ id: 'a' }], deleted_recipes: [], favorites: [], versions: [] }, new Date()))
+    expect(parseBackup(text).summary).toMatchObject({ recipes: 1, deleted: 0 })
+  })
+})
+
+describe('storage usage', () => {
+  const MB = 1024 * 1024
+  it('says how much of each limit is used', () => {
+    const [db, photos] = usageLines({ database_bytes: 15 * MB, photo_bytes: 300 * MB })
+    expect(db).toMatchObject({ text: 'القاعدة: 15 م.ب من 500 (3%)', percent: 3, warn: false })
+    expect(photos).toMatchObject({ text: 'الصور: 300 م.ب من 1024 (29%)', percent: 29, warn: false })
+  })
+
+  it('warns from 80% and never shows more than 100% in the bar', () => {
+    expect(usageLines({ database_bytes: 400 * MB, photo_bytes: 0 })[0].warn).toBe(true)
+    expect(usageLines({ database_bytes: 399 * MB, photo_bytes: 0 })[0].warn).toBe(false)
+    expect(usageLines({ database_bytes: 600 * MB, photo_bytes: 0 })[0].percent).toBe(100)
+  })
+
+  it('shows nothing used as zero and a little as at least 1%', () => {
+    expect(usageLines({ database_bytes: 0, photo_bytes: 0 })[1].text).toBe('الصور: 0 م.ب من 1024 (0%)')
+    expect(usageLines({ database_bytes: 0, photo_bytes: 2 * MB })[1].text).toBe('الصور: 2.0 م.ب من 1024 (1%)')
   })
 })

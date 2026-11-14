@@ -19,7 +19,7 @@ declare
   doc1 jsonb := '{"title":"سلطة تجربة","status":"complete","category":{"section":"سلطات","section_en":"Salads"},"sources":[{"url":"https://example.test/v","platform":"web"}],"ingredient_groups":[{"name":null,"items":[{"text":"خس"},{"text":"زيت زيتون"}]}],"steps":[{"order":1,"text":"قطّعي"}],"notes":["باردة"],"tags":{"meal_types":["lunch"],"kid_friendly":true,"custom":["سريعة"]},"onenote":{},"raw_text":"x","flags":["quantities_missing"]}';
   sat date := date '2026-11-14';
   a text; b text; c text; fid uuid; lunch uuid; dinner uuid; p1 uuid; p2 uuid; m1 uuid; m2 uuid; t1 uuid; t2 uuid;
-  b1 jsonb; b2 jsonb; b3 jsonb; file_a jsonb; file_b jsonb; res jsonb; res2 jsonb;
+  b1 jsonb; b2 jsonb; b3 jsonb; exported jsonb; file_a jsonb; file_b jsonb; res jsonb; res2 jsonb;
   part text; key text; n int; log text := '';
   -- the parts the restore brings back, and the parts it leaves out on purpose
   restored text[] := array['recipes','deleted_recipes','favorites','flags','versions','onenote_pages','cook_log','food_groups','plan_settings','people','meal_slots','week_plans','planned_meals','slot_food_groups','prep_templates','prep_tasks'];
@@ -80,6 +80,23 @@ begin
 
   -- ---- the backup ----
   b1 := public.backup_bundle(hh);
+
+  -- the owner's own "download everything" gives the very same data as the nightly backup; others are refused
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  exported := public.export_backup();
+  reset role;
+  if exported is distinct from b1 then
+    raise exception 'FAILED: export_backup() does not give the same data as backup_bundle()';
+  end if;
+  perform set_config('request.jwt.claims', json_build_object('sub', viewer_id, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  begin
+    perform public.export_backup();
+    raise exception 'FAILED: a non-owner exported the backup';
+  exception when sqlstate '42501' then null;
+  end;
+  reset role;
   for key in select jsonb_object_keys(b1) loop
     if not (key = any (restored) or key = any (left_out)) then
       raise exception 'FAILED: the backup has a part "%" that the restore test does not know. Cover it in restore_from_backup and add it to this test.', key;

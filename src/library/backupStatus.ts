@@ -2,6 +2,7 @@
 
 import { supabase } from '../lib/supabase'
 import { callFunction } from '../lib/supabase'
+import { downloadJson } from './api'
 import { explain } from '../offline/readThrough'
 
 export interface BackupRun {
@@ -45,6 +46,88 @@ export async function backUpNow(): Promise<void> {
   } catch (error) {
     throw explain(error)
   }
+}
+
+// ---- Download everything ("نزّلي نسخة كاملة") ----
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+// Same naming as the nightly files in OneDrive: hk-backup-2026-11-14-0930.json (UTC).
+export const backupFileName = (at: Date) =>
+  `hk-backup-${at.getUTCFullYear()}-${pad2(at.getUTCMonth() + 1)}-${pad2(at.getUTCDate())}-${pad2(at.getUTCHours())}${pad2(at.getUTCMinutes())}.json`
+
+const length = (value: unknown) => (Array.isArray(value) ? value.length : 0)
+
+// The file the nightly job writes (format, version, counts, then every part), made from the data the
+// database gives the owner. The restore page reads it exactly like a file from OneDrive.
+export function buildBackupFile(bundle: Record<string, unknown>, now: Date): Record<string, unknown> {
+  return {
+    format: 'home-kitchen-backup',
+    version: 1,
+    created_at: now.toISOString(),
+    counts: {
+      recipes: length(bundle.recipes),
+      deleted_recipes: length(bundle.deleted_recipes),
+      favorites: length(bundle.favorites),
+      flags: length(bundle.flags),
+      versions: length(bundle.versions),
+      onenote_pages: length(bundle.onenote_pages),
+    },
+    ...bundle,
+  }
+}
+
+// Owner only (the database refuses anyone else). The photo files are not in it, only their records;
+// the files are copied to OneDrive by the nightly backup.
+export async function downloadFullBackup(now = new Date()): Promise<{ name: string; recipes: number }> {
+  try {
+    const { data, error } = await supabase.rpc('export_backup')
+    if (error) throw new Error(error.code === '42501' ? 'تنزيل النسخة الكاملة للمالكة فقط.' : error.message)
+    const file = buildBackupFile(data as Record<string, unknown>, now)
+    const name = backupFileName(now)
+    downloadJson(name, file)
+    return { name, recipes: length((data as Record<string, unknown>).recipes) }
+  } catch (error) {
+    throw explain(error)
+  }
+}
+
+// ---- How much of the free plan is used ----
+
+// The free plan's room (Supabase): 500 MB of database, 1 GB of files.
+export const FREE_DATABASE_BYTES = 500 * 1024 * 1024
+export const FREE_PHOTO_BYTES = 1024 * 1024 * 1024
+export const USAGE_WARN_AT = 0.8
+
+export interface Usage {
+  database_bytes: number
+  photo_bytes: number
+}
+
+export async function loadStorageUsage(): Promise<Usage> {
+  const { data, error } = await supabase.rpc('storage_usage')
+  if (error) throw new Error(error.message)
+  const usage = data as Usage
+  return { database_bytes: Number(usage.database_bytes), photo_bytes: Number(usage.photo_bytes) }
+}
+
+export interface UsageLine {
+  label: string
+  text: string
+  percent: number
+  warn: boolean
+}
+
+const MB = 1024 * 1024
+const inMb = (bytes: number) => (bytes < MB ? '0' : (bytes / MB).toFixed(bytes < 10 * MB ? 1 : 0))
+
+// "القاعدة: 15 م.ب من 500 (3%)" for the database and the photo files.
+export function usageLines(usage: Usage): UsageLine[] {
+  const line = (label: string, used: number, limit: number): UsageLine => {
+    const ratio = used / limit
+    return { label, text: `${label}: ${inMb(used)} م.ب من ${Math.round(limit / MB)} (${Math.max(used > 0 ? 1 : 0, Math.round(ratio * 100))}%)`, percent: Math.min(100, Math.round(ratio * 100)), warn: ratio >= USAGE_WARN_AT }
+  }
+  return [line('القاعدة', usage.database_bytes, FREE_DATABASE_BYTES), line('الصور', usage.photo_bytes, FREE_PHOTO_BYTES)]
 }
 
 export type BackupState =
