@@ -17,6 +17,7 @@ import FoodGroups from '../nutrition/FoodGroups'
 import PrepTemplates from '../prep/PrepTemplates'
 import { loadSuggestions, usableIngredients, type Suggestion } from '../ingredients/api'
 import { orderByRole } from '../shopping/roles'
+import AddToPlan from '../plan/AddToPlan'
 import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { safeHref } from './safeUrl'
@@ -212,6 +213,8 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
           الطريقة والملاحظات في OneNote: <a href={page.web_url} target="_blank" rel="noreferrer" className="text-accent underline">افتحي الصفحة</a>.
         </p>
       )}
+
+      {canEdit && !inTrash && <AddToPlan recipeId={id} />}
 
       <FoodGroups recipeId={id} canEdit={canEdit && !inTrash} />
 

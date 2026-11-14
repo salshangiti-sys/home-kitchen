@@ -8,6 +8,7 @@ import type { RecipePage as PageLink } from './onenote'
 vi.mock('../history/CookHistory', () => ({ default: () => <p>سجل التجارب</p> }))
 vi.mock('../nutrition/FoodGroups', () => ({ default: () => <p>العناصر الغذائية</p> }))
 vi.mock('../prep/PrepTemplates', () => ({ default: () => <p>تجهيزات الوصفة</p> }))
+vi.mock('../plan/AddToPlan', () => ({ default: () => <p>إضافة إلى الخطة</p> }))
 vi.mock('../photos/PhotoGallery', () => ({ default: () => <p>الصور</p> }))
 
 const api = vi.hoisted(() => ({ loadRecipe: vi.fn(), loadRecipePage: vi.fn(), refreshFromPage: vi.fn(), loadSuggestions: vi.fn() }))
@@ -148,5 +149,15 @@ describe('a recipe in the app', () => {
     expect([...lists[0].querySelectorAll('li')].map((li) => li.textContent)).toEqual(['٢ كوب أرز', 'صدور دجاج', 'ملح', 'كمون', '٢ بصلة', 'بطاطس', 'قشطة', '٢ ملعقة زيت'])
     expect(screen.getByText('الصوص')).toBeTruthy() // the group keeps its name and its place
     expect([...lists[1].querySelectorAll('li')].map((li) => li.textContent)).toEqual(['ملح', 'بصل'])
+  })
+
+  it('offers adding to the plan to owners and editors only, and not for a recipe in the trash', async () => {
+    api.loadRecipe.mockResolvedValue(loaded(SALAD))
+    const { unmount } = render(<RecipePage id="salads-007" canEdit userId="u1" />)
+    expect(await screen.findByText('إضافة إلى الخطة')).toBeTruthy()
+    unmount()
+    render(<RecipePage id="salads-007" canEdit={false} userId="u1" />)
+    await screen.findByRole('heading', { name: 'سلطة خضراء' })
+    expect(screen.queryByText('إضافة إلى الخطة')).toBeNull()
   })
 })
