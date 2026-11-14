@@ -15,6 +15,7 @@ export interface RecipeSummary {
   meal_types: MealType[]
   kid_friendly: boolean | null
   lunchbox: boolean | null
+  custom_tags?: string[] // her own tags («سريعة»); absent in a list saved by an older version of the app
   updated_at: string
 }
 
@@ -52,7 +53,7 @@ async function fetchRecipeList(): Promise<RecipeList> {
   const [recipes, favorites, flags] = await Promise.all([
     supabase
       .from('recipes')
-      .select('id,title,status,section,search_norm,meal_types,kid_friendly,lunchbox,updated_at')
+      .select('id,title,status,section,search_norm,meal_types,kid_friendly,lunchbox,custom_tags,updated_at')
       .is('deleted_at', null)
       .order('title'),
     supabase.from('user_favorites').select('recipe_id'),
