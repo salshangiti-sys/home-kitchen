@@ -16,6 +16,7 @@ import CookHistory from '../history/CookHistory'
 import FoodGroups from '../nutrition/FoodGroups'
 import PrepTemplates from '../prep/PrepTemplates'
 import { loadSuggestions, usableIngredients, type Suggestion } from '../ingredients/api'
+import { orderByRole } from '../shopping/roles'
 import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { safeHref } from './safeUrl'
@@ -181,7 +182,7 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         <Section title="المقادير">
           <p className="mb-2 text-sm text-muted">لا سطور مقادير في صفحة OneNote؛ هذه المقادير أكّدتِها في التطبيق (منها تُبنى المقاضي).</p>
           <ul className="flex list-disc flex-col gap-1.5 ps-5 marker:text-muted">
-            {used.lines.map((line) => (
+            {orderByRole(used.lines, (line) => line).map((line) => (
               <li key={line} dir="auto" className="leading-relaxed">{line}</li>
             ))}
           </ul>
@@ -190,12 +191,13 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
 
       {doc.ingredient_groups.some((g) => g.items.length > 0) && (
         <Section title="المقادير">
+          <p className="mb-2 text-sm text-muted">مرتَّبة للقراءة: نشويات، بروتين، بهارات، خضار، ألبان، ثم الباقي. صفحة OneNote لم تتغير.</p>
           <div className="flex flex-col gap-4">
             {doc.ingredient_groups.map((group, g) => (
               <div key={g}>
                 {group.name !== null && <h4 dir="auto" className="mb-1 font-semibold">{group.name}</h4>}
                 <ul className="flex list-disc flex-col gap-1.5 ps-5 marker:text-muted">
-                  {group.items.map((item, i) => (
+                  {orderByRole(group.items, (item) => item.text).map((item, i) => (
                     <li key={i} dir="auto" className="leading-relaxed">{item.text}</li>
                   ))}
                 </ul>

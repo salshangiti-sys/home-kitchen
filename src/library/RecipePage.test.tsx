@@ -130,4 +130,23 @@ describe('a recipe in the app', () => {
     expect(screen.queryByText('جزر')).toBeNull()
     expect(screen.queryByText(/بانتظار تأكيدك/)).toBeNull()
   })
+
+  it('shows the ingredients grouped by kind: starch, protein, spices, vegetables, dairy, then the rest (each group keeps its own order)', async () => {
+    const item = (text: string) => ({ text })
+    api.loadRecipe.mockResolvedValue(
+      loaded({
+        ...SALAD,
+        ingredient_groups: [
+          { name: null, items: ['٢ ملعقة زيت', 'قشطة', '٢ بصلة', 'ملح', '٢ كوب أرز', 'صدور دجاج', 'كمون', 'بطاطس'].map(item) },
+          { name: 'الصوص', items: ['بصل', 'ملح'].map(item) },
+        ],
+      }),
+    )
+    render(<RecipePage id="salads-007" canEdit={false} userId="u1" />)
+    await screen.findByText('٢ كوب أرز')
+    const lists = document.querySelectorAll('ul.list-disc')
+    expect([...lists[0].querySelectorAll('li')].map((li) => li.textContent)).toEqual(['٢ كوب أرز', 'صدور دجاج', 'ملح', 'كمون', '٢ بصلة', 'بطاطس', 'قشطة', '٢ ملعقة زيت'])
+    expect(screen.getByText('الصوص')).toBeTruthy() // the group keeps its name and its place
+    expect([...lists[1].querySelectorAll('li')].map((li) => li.textContent)).toEqual(['ملح', 'بصل'])
+  })
 })
