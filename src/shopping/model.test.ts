@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Op } from '../offline/outbox'
-import { ADD_KIND, CLEAR_KIND, MARK_KIND, PANTRY_KIND, buildShoppingList, keyOf, overlayMarks, type Mark, type MealIn, type RecipeLines } from './model'
+import { ADD_KIND, CLEAR_KIND, CONFIRM_KIND, MARK_KIND, PANTRY_KIND, UNCONFIRM_KIND, buildShoppingList, keyOf, overlayConfirmations, overlayMarks, type Confirmation, type Mark, type MealIn, type RecipeLines } from './model'
 
 const meal = (recipe_id: string | null, title: string, status: MealIn['status'] = 'planned'): MealIn => ({ recipe_id, title, status })
 const recipes: Record<string, RecipeLines> = {
@@ -15,7 +15,7 @@ describe('buildShoppingList', () => {
   it('groups the same ingredient of several recipes into one item that keeps each source line as written', () => {
     const list = buildShoppingList({ meals: [meal('soup', 'شوربة عدس'), meal('salad', 'سلطة')], recipes, ...none })
     const onion = list.toBuy.flatMap((g) => g.items).find((i) => i.key === 'بصل')!
-    expect(onion.sources).toEqual([
+    expect(onion.sources.map((s) => ({ line: s.line, recipe: s.recipe }))).toEqual([
       { line: '٢ بصلة', recipe: 'شوربة عدس' },
       { line: '١ بصلة', recipe: 'سلطة' },
     ])
@@ -83,6 +83,48 @@ describe('buildShoppingList', () => {
   })
 })
 
+describe('confirmed quantities in the list', () => {
+  const lines: Record<string, RecipeLines> = {
+    a: { title: 'أرز', lines: ['٥٠٠ جرام لحم', '١ كيلو لحم', 'ملح'] },
+    b: { title: 'كبسة', lines: ['٢٠٠ جرام لحم', '٣ فصوص ثوم'] },
+  }
+  const sure = (recipe_id: string, line: string, item_key: string, quantity: number, unit: Confirmation['unit']): Confirmation => ({ recipe_id, line, item_key, quantity, unit })
+  const meat = (list: ReturnType<typeof buildShoppingList>) => list.toBuy.flatMap((g) => g.items).find((i) => i.key === 'لحم')!
+
+  it('reads a quantity from the line but adds nothing until it is confirmed', () => {
+    const list = buildShoppingList({ meals: [meal('a', 'أرز'), meal('b', 'كبسة')], recipes: lines, ...none })
+    const item = meat(list)
+    expect(item.totals).toEqual([])
+    expect(item.unconfirmed).toBe(3)
+    expect(item.sources.map((s) => s.read)).toEqual([{ quantity: 500, unit: 'g' }, { quantity: 1, unit: 'kg' }, { quantity: 200, unit: 'g' }])
+    expect(item.sources.every((s) => s.confirmed === null)).toBe(true)
+  })
+
+  it('adds only the confirmed quantities (500 g + 1 kg = 1.5 kg) and counts the lines still unconfirmed', () => {
+    const confirmations = [sure('a', '٥٠٠ جرام لحم', 'لحم', 500, 'g'), sure('a', '١ كيلو لحم', 'لحم', 1, 'kg')]
+    const item = meat(buildShoppingList({ meals: [meal('a', 'أرز'), meal('b', 'كبسة')], recipes: lines, ...none, confirmations }))
+    expect(item.totals).toEqual([{ quantity: 1.5, unit: 'kg' }])
+    expect(item.unconfirmed).toBe(1) // «٢٠٠ جرام لحم» of the other recipe is not confirmed: it is not in the total
+  })
+
+  it('keeps incompatible confirmed units as separate totals', () => {
+    const confirmations = [sure('a', '٥٠٠ جرام لحم', 'لحم', 500, 'g'), sure('b', '٢٠٠ جرام لحم', 'لحم', 2, 'cup')]
+    expect(meat(buildShoppingList({ meals: [meal('a', 'أرز'), meal('b', 'كبسة')], recipes: lines, ...none, confirmations })).totals).toEqual([{ quantity: 500, unit: 'g' }, { quantity: 2, unit: 'cup' }])
+  })
+
+  it('counts a recipe planned twice twice', () => {
+    const confirmations = [sure('b', '٢٠٠ جرام لحم', 'لحم', 200, 'g')]
+    const item = meat(buildShoppingList({ meals: [meal('b', 'كبسة'), meal('b', 'كبسة')], recipes: lines, ...none, confirmations }))
+    expect(item.totals).toEqual([{ quantity: 400, unit: 'g' }])
+    expect(item.sources[0].times).toBe(2)
+  })
+
+  it('a confirmation of a line that was rewritten no longer applies', () => {
+    const confirmations = [sure('b', '٢٠٠ جرام لحم مفروم', 'لحم', 200, 'g')]
+    expect(meat(buildShoppingList({ meals: [meal('b', 'كبسة')], recipes: lines, ...none, confirmations })).totals).toEqual([])
+  })
+})
+
 const op = (kind: string, key: string, args: Record<string, unknown>): Op => ({ id: key + kind, key, kind, args, at: '2026-11-14T10:00:00Z' })
 
 describe('overlayMarks (changes waiting to be sent)', () => {
@@ -115,5 +157,17 @@ describe('overlayMarks (changes waiting to be sent)', () => {
     const out = overlayMarks([], [], [op(MARK_KIND, 'm1', { week: '2026-11-21', key: 'ثوم', status: 'bought' })], week)
     expect(out.marks).toEqual([])
     expect(out.waiting.size).toBe(0)
+  })
+})
+
+describe('overlayConfirmations (changes waiting to be sent)', () => {
+  it('puts waiting confirmations and removals on top of what was read', () => {
+    const read: Confirmation[] = [{ recipe_id: 'a', line: 'x', item_key: 'لحم', quantity: 1, unit: 'kg' }]
+    const out = overlayConfirmations(read, [
+      op(CONFIRM_KIND, 'c1', { recipe: 'a', line: 'y', key: 'ثوم', quantity: 3, unit: 'clove' }),
+      op(UNCONFIRM_KIND, 'c2', { recipe: 'a', line: 'x', key: 'لحم' }),
+    ])
+    expect(out.confirmations).toEqual([{ recipe_id: 'a', line: 'y', item_key: 'ثوم', quantity: 3, unit: 'clove' }])
+    expect(out.waiting.size).toBe(2)
   })
 })

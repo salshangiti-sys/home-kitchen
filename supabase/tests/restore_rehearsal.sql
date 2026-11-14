@@ -22,7 +22,7 @@ declare
   b1 jsonb; b2 jsonb; b3 jsonb; exported jsonb; file_a jsonb; file_b jsonb; res jsonb; res2 jsonb;
   part text; key text; n int; log text := '';
   -- the parts the restore brings back, and the parts it leaves out on purpose
-  restored text[] := array['recipes','deleted_recipes','favorites','flags','versions','onenote_pages','cook_log','food_groups','plan_settings','people','meal_slots','week_plans','planned_meals','slot_food_groups','prep_templates','prep_tasks','ingredient_suggestions','shopping_marks','pantry_items'];
+  restored text[] := array['recipes','deleted_recipes','favorites','flags','versions','onenote_pages','cook_log','food_groups','plan_settings','people','meal_slots','week_plans','planned_meals','slot_food_groups','prep_templates','prep_tasks','ingredient_suggestions','shopping_marks','pantry_items','quantity_confirmations'];
   left_out text[] := array['household','members','onenote_library','photos'];
 begin
   insert into auth.users (id) values (owner_id), (viewer_id);
@@ -88,6 +88,10 @@ begin
   perform public.add_shopping_item(sat, 'حفاضات', 'حفاضات');
   perform public.set_pantry_item('زيت', 'زيت', true);
   perform public.set_pantry_item('أرز', 'أرز', true);
+  -- confirmed quantities: a count, a unit, and one item of a line that lists several
+  perform public.confirm_quantity(a, '٢ بصلة', 'بصل', 2, null);
+  perform public.confirm_quantity(a, '٣ فصوص ثوم', 'ثوم', 3, 'clove');
+  perform public.confirm_quantity(b, 'ملح، كمون ١ م ص', 'كمون', 1, 'tsp');
   reset role;
 
   -- a second member's own entries
@@ -180,6 +184,9 @@ begin
   select count(*) into n from public.recipe_ingredient_suggestions where household_id = hh;
   if n <> 0 then raise exception 'FAILED: the dry run saved suggestion lines'; end if;
   if (res ->> 'shopping_marks_added')::int <> 3 or (res ->> 'pantry_items_added')::int <> 2 then raise exception 'FAILED: the dry run should report 3 marks and 2 pantry items: %', res; end if;
+  if (res ->> 'quantity_confirmations_added')::int <> 3 then raise exception 'FAILED: the dry run should report 3 confirmed quantities: %', res; end if;
+  select count(*) into n from public.quantity_confirmations where household_id = hh;
+  if n <> 0 then raise exception 'FAILED: the dry run saved confirmed quantities'; end if;
   select count(*) into n from public.shopping_marks where household_id = hh;
   if n <> 0 then raise exception 'FAILED: the dry run saved shopping marks'; end if;
 
@@ -188,6 +195,7 @@ begin
   if jsonb_array_length(coalesce(res -> 'errors', '[]'::jsonb)) <> 0 then raise exception 'FAILED: the restore reported errors: %', res; end if;
   if (res ->> 'ingredient_suggestions_added')::int <> 4 then raise exception 'FAILED: the restore should add 4 suggestion lines: %', res; end if;
   if (res ->> 'shopping_marks_added')::int <> 3 or (res ->> 'pantry_items_added')::int <> 2 then raise exception 'FAILED: the restore should add 3 marks and 2 pantry items: %', res; end if;
+  if (res ->> 'quantity_confirmations_added')::int <> 3 then raise exception 'FAILED: the restore should add 3 confirmed quantities: %', res; end if;
   res2 := public.restore_from_backup(file_b, false);
   reset role;
   b3 := public.backup_bundle(hh);

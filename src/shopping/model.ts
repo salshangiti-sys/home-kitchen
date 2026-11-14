@@ -11,6 +11,7 @@ import { normalizeAr } from '../library/normalize'
 import type { Op } from '../offline/outbox'
 import { AISLE_LABELS, AISLE_ORDER, type Aisle } from './dictionary'
 import { identify, identifyAll } from './catalog'
+import { sumQuantities, type Quantity, type Unit } from './quantity'
 
 export type MarkStatus = 'needed' | 'have' | 'bought'
 
@@ -42,11 +43,32 @@ export interface Source {
   recipe: string
 }
 
+// A confirmed quantity of one recipe line, for the shopping item it counts for.
+export interface Confirmation {
+  recipe_id: string
+  line: string
+  item_key: string
+  quantity: number
+  unit: Unit
+}
+
+// One line an item came from. `read` is what the parser read from it (a suggestion, never added up);
+// `confirmed` is what the person confirmed (the only thing that is added up). `times` is how many
+// planned meals use the recipe this week (a recipe cooked twice needs its lines twice).
+export interface ItemSource extends Source {
+  recipeId: string
+  times: number
+  read: Quantity | null
+  confirmed: Quantity | null
+}
+
 export interface Item {
   key: string
   label: string
   aisle: Aisle
-  sources: Source[]
+  sources: ItemSource[]
+  totals: Quantity[] // the confirmed quantities added up (by compatible unit); empty when none is confirmed
+  unconfirmed: number // lines of this item whose quantity is not confirmed (shown as written)
   status: MarkStatus
   pantry: boolean // kept at home for every week
   manual: boolean // added by hand
@@ -83,10 +105,13 @@ const byName = (a: { label: string }, b: { label: string }) => a.label.localeCom
 // The key a hand-written item is kept under: the same one an ingredient line of that name gets.
 export const keyOf = (label: string) => identify(label).key || normalizeAr(label)
 
-export function buildShoppingList(input: { meals: MealIn[]; recipes: Record<string, RecipeLines>; marks: Mark[]; pantry: PantryItem[] }): ShoppingList {
+export function buildShoppingList(input: { meals: MealIn[]; recipes: Record<string, RecipeLines>; marks: Mark[]; pantry: PantryItem[]; confirmations?: Confirmation[] }): ShoppingList {
+  const confirmed = new Map((input.confirmations ?? []).map((c) => [`${c.recipe_id}\u0000${c.line}\u0000${c.item_key}`, c]))
+  const times = new Map<string, number>()
   const marks = new Map(input.marks.map((m) => [m.key, m]))
   const pantryKeys = new Set(input.pantry.map((p) => p.key))
   const counted = input.meals.filter(isCounted)
+  for (const meal of counted) if (meal.recipe_id) times.set(meal.recipe_id, (times.get(meal.recipe_id) ?? 0) + 1)
 
   const items = new Map<string, Item>()
   const sentences: Source[] = []
@@ -115,8 +140,16 @@ export function buildShoppingList(input: { meals: MealIn[]; recipes: Record<stri
       }
       for (const id of found) {
         if (id.aisle === 'none' || !id.key) continue // water and the like: not bought
-        const item = items.get(id.key) ?? { key: id.key, label: id.label, aisle: id.aisle, sources: [], status: 'needed' as MarkStatus, pantry: false, manual: false }
-        item.sources.push({ line, recipe: meal.title })
+        const item = items.get(id.key) ?? { key: id.key, label: id.label, aisle: id.aisle, sources: [], totals: [], unconfirmed: 0, status: 'needed' as MarkStatus, pantry: false, manual: false }
+        const sure = confirmed.get(`${meal.recipe_id}\u0000${line}\u0000${id.key}`)
+        item.sources.push({
+          line,
+          recipe: meal.title,
+          recipeId: meal.recipe_id,
+          times: times.get(meal.recipe_id) ?? 1,
+          read: id.parsed.quantity !== null ? { quantity: id.parsed.quantity, unit: id.parsed.unit } : null,
+          confirmed: sure ? { quantity: Number(sure.quantity), unit: sure.unit } : null,
+        })
         items.set(id.key, item)
       }
     }
@@ -127,10 +160,12 @@ export function buildShoppingList(input: { meals: MealIn[]; recipes: Record<stri
     if (!mark.is_manual) continue
     const existing = items.get(mark.key)
     if (existing) existing.manual = true
-    else items.set(mark.key, { key: mark.key, label: mark.label ?? mark.key, aisle: identify(mark.label ?? mark.key).aisle, sources: [], status: 'needed', pantry: false, manual: true })
+    else items.set(mark.key, { key: mark.key, label: mark.label ?? mark.key, aisle: identify(mark.label ?? mark.key).aisle, sources: [], totals: [], unconfirmed: 0, status: 'needed', pantry: false, manual: true })
   }
 
   for (const item of items.values()) {
+    item.totals = sumQuantities(item.sources.flatMap((s) => (s.confirmed ? [{ quantity: s.confirmed.quantity * s.times, unit: s.confirmed.unit }] : [])))
+    item.unconfirmed = item.sources.filter((s) => !s.confirmed).length
     const mark = marks.get(item.key)
     item.pantry = pantryKeys.has(item.key)
     item.status = mark ? mark.status : item.pantry ? 'have' : 'needed'
@@ -189,4 +224,27 @@ export function overlayMarks(marks: Mark[], pantry: PantryItem[], ops: Op[], wee
     }
   }
   return { marks: [...byKey.values()], pantry: [...home.values()], waiting }
+}
+
+// ---- confirmed quantities waiting in the outbox ----
+
+export const CONFIRM_KIND = 'quantity_confirm'
+export const UNCONFIRM_KIND = 'quantity_unconfirm'
+export const confirmKey = (recipe: string, line: string, item: string) => `qty:${recipe}\u0000${line}\u0000${item}`
+
+// The confirmations as the person last left them on this device (waiting changes on top of what was read).
+export function overlayConfirmations(confirmations: Confirmation[], ops: Op[]): { confirmations: Confirmation[]; waiting: Set<string> } {
+  const byKey = new Map(confirmations.map((c) => [`${c.recipe_id}\u0000${c.line}\u0000${c.item_key}`, c]))
+  const waiting = new Set<string>()
+  for (const op of ops) {
+    if (op.kind !== CONFIRM_KIND && op.kind !== UNCONFIRM_KIND) continue
+    const recipe = String(op.args.recipe ?? '')
+    const line = String(op.args.line ?? '')
+    const item = String(op.args.key ?? '')
+    const key = `${recipe}\u0000${line}\u0000${item}`
+    if (op.kind === CONFIRM_KIND) byKey.set(key, { recipe_id: recipe, line, item_key: item, quantity: Number(op.args.quantity), unit: (op.args.unit as Unit) ?? null })
+    else byKey.delete(key)
+    waiting.add(key)
+  }
+  return { confirmations: [...byKey.values()], waiting }
 }

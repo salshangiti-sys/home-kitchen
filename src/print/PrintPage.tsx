@@ -11,6 +11,7 @@ import * as prep from '../prep/api'
 import { buildPrintWeek, type PrintDay } from './model'
 import { loadShopping } from '../shopping/api'
 import { buildShoppingList, plannedRecipes, type ShoppingList } from '../shopping/model'
+import { formatTotals } from '../shopping/quantity'
 
 export interface PrintApi {
   loadWeek: typeof plan.loadWeek
@@ -83,7 +84,7 @@ export default function PrintPage({ week, withTasks, withShopping = false, today
         if (withShopping && api.loadShopping) {
           try {
             const found = await api.loadShopping(weekData.weekStart, plannedRecipes(weekData.meals))
-            shop = buildShoppingList({ meals: weekData.meals, recipes: found.recipes, marks: found.marks, pantry: found.pantry })
+            shop = buildShoppingList({ meals: weekData.meals, recipes: found.recipes, marks: found.marks, pantry: found.pantry, confirmations: found.confirmations })
           } catch (e) {
             if (!cancelled) setShopError(plan.planMessage(e))
           }
@@ -191,7 +192,10 @@ export default function PrintPage({ week, withTasks, withShopping = false, today
                       {group.items.map((item) => (
                         <li key={item.key} className="flex items-start gap-2">
                           <Box done={false} />
-                          <span dir="auto">{item.label}</span>
+                          <span dir="auto">
+                            {item.label}
+                            {item.totals.length > 0 && <span> — {formatTotals(item.totals)}</span>}
+                          </span>
                         </li>
                       ))}
                     </ul>
