@@ -72,7 +72,6 @@ const NAV: Array<{ label: string; to: string; match: Route['name'][]; editorsOnl
   { label: 'الوصفات', to: href.library, match: ['library', 'recipe'] },
   { label: 'الخطة', to: href.plan(), match: ['plan'] },
   { label: 'الآن', to: href.now, match: ['now'] },
-  { label: 'وصفة جديدة', to: href.new, match: ['new'], editorsOnly: true },
   { label: 'استيراد', to: href.import, match: ['import'], editorsOnly: true },
   { label: 'OneNote', to: href.onenote, match: ['onenote'], editorsOnly: true },
 ]

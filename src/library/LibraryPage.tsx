@@ -150,7 +150,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
           {canEdit && (
             <div className="flex flex-wrap justify-center gap-2">
               <LinkButton href={href.import} kind="primary">استورد ملف الوصفات</LinkButton>
-              <LinkButton href={href.new}>أضف وصفة</LinkButton>
+              <LinkButton href={href.onenote}>أضيفي من دفتر OneNote</LinkButton>
             </div>
           )}
         </div>
