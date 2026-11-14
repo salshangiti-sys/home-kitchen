@@ -138,10 +138,12 @@ describe('the print page', () => {
       recipes: { soup: { title: 'شوربة', lines: ['٢ بصلة', 'ملح'] }, empty: { title: 'وصفة فارغة', lines: [] } },
       marks: [{ key: 'بصل', label: null, status: 'bought' as const, is_manual: false }],
       pantry: [],
+      confirmations: [{ recipe_id: 'soup', line: 'ملح', item_key: 'ملح', quantity: 2, unit: 'tbsp' as const }],
     }))
     render(<PrintPage week={WEEK} withTasks={false} withShopping api={a} today={() => WEEK} />)
     const shop = await screen.findByRole('region', { name: 'المقاضي' })
     expect(within(shop).getByText('ملح')).toBeTruthy()
+    expect(within(shop).getByText(/ملعقتان كبيرتان/)).toBeTruthy() // the confirmed quantity is printed with the item
     expect(within(shop).queryByText('بصل')).toBeNull() // already bought: not printed
     expect(within(shop).getByText(/وصفة فارغة/)).toBeTruthy()
     expect(a.loadWeekTasks).not.toHaveBeenCalled()

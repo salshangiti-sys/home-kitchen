@@ -11,7 +11,8 @@ import { enqueue, flush, pending, subscribe, type Op } from '../offline/outbox'
 import * as plan from '../plan/api'
 import { addDays, isIsoDate, todayIso, weekRange } from '../plan/dates'
 import { loadShopping, shoppingMessage, type ShoppingData } from './api'
-import { ADD_KIND, CLEAR_KIND, MARK_KIND, PANTRY_KIND, buildShoppingList, keyOf, markKey, overlayMarks, pantryKey, plannedRecipes, type Item, type MarkStatus } from './model'
+import { ADD_KIND, CLEAR_KIND, CONFIRM_KIND, MARK_KIND, PANTRY_KIND, UNCONFIRM_KIND, buildShoppingList, confirmKey, keyOf, markKey, overlayConfirmations, overlayMarks, pantryKey, plannedRecipes, type Item, type ItemSource, type MarkStatus } from './model'
+import { UNITS, formatQuantity, formatTotals, parseAmount, type Quantity, type Unit } from './quantity'
 
 export interface ShoppingApi {
   loadWeek: typeof plan.loadWeek
@@ -72,12 +73,13 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
 
   const weekStart = weekData?.weekStart ?? ''
   const shown = useMemo(() => (base && weekData ? overlayMarks(base.marks, base.pantry, ops, weekStart) : null), [base, weekData, ops, weekStart])
+  const sure = useMemo(() => (base ? overlayConfirmations(base.confirmations ?? [], ops) : null), [base, ops])
   const list = useMemo(
     () =>
       base && weekData && shown
-        ? buildShoppingList({ meals: weekData.meals, recipes: base.recipes, marks: shown.marks, pantry: shown.pantry })
+        ? buildShoppingList({ meals: weekData.meals, recipes: base.recipes, marks: shown.marks, pantry: shown.pantry, confirmations: sure?.confirmations })
         : null,
-    [base, weekData, shown],
+    [base, weekData, shown, sure],
   )
 
   // Every change is first kept in the outbox (the list shows it at once), then sent. With no connection
@@ -110,11 +112,18 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
     setAdding('')
     await change(ADD_KIND, markKey(weekStart, keyOf(text)), { week: weekStart, key: keyOf(text), label: text })
   }
+  const confirm = (item: Item, source: ItemSource, q: Quantity) =>
+    change(CONFIRM_KIND, confirmKey(source.recipeId, source.line, item.key), { recipe: source.recipeId, line: source.line, key: item.key, quantity: q.quantity, unit: q.unit })
+  const unconfirm = (item: Item, source: ItemSource) => change(UNCONFIRM_KIND, confirmKey(source.recipeId, source.line, item.key), { recipe: source.recipeId, line: source.line, key: item.key })
+  const confirmAllRead = async (item: Item) => {
+    for (const source of item.sources) if (source.read && !source.confirmed) await confirm(item, source, source.read)
+  }
   const removeManual = (item: Item) => change(CLEAR_KIND, markKey(weekStart, item.key), { week: weekStart, key: item.key })
 
   if (!list || !weekData) return error ? <Notice tone="error">{error}</Notice> : <p className="text-muted">جارٍ التحميل…</p>
 
   const waiting = sending ? new Set<string>() : shown?.waiting ?? new Set<string>()
+  const waitingQuantities = sending ? new Set<string>() : sure?.waiting ?? new Set<string>()
   const empty = list.meals === 0 && list.toBuy.length === 0 && list.done.length === 0
 
   const row = (item: Item) => {
@@ -138,22 +147,35 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
               {waiting.has(item.key) && <Badge tone="warn">لم تُرسل بعد</Badge>}
               {item.sources.length > 0 && <span dir="auto">{[...new Set(item.sources.map((s) => s.recipe))].join('، ')}</span>}
             </span>
+            {item.totals.length > 0 && (
+              <span className="text-sm">
+                <span className="text-muted">المجموع المؤكَّد: </span>
+                <strong dir="auto">{formatTotals(item.totals)}</strong>
+                {item.unconfirmed > 0 && <span className="text-muted"> (غير محسوبة: {item.unconfirmed === 1 ? 'سطر واحد' : `${item.unconfirmed} أسطر`})</span>}
+              </span>
+            )}
           </span>
         </label>
         {(item.sources.length > 0 || canEdit) && (
           <details className="mt-1">
             <summary className="cursor-pointer text-sm text-muted">التفاصيل</summary>
             {item.sources.length > 0 && (
-              <ul className="mt-2 flex flex-col gap-1 text-sm">
-                {item.sources.map((s, i) => (
-                  <li key={i} dir="auto" className="text-muted">
-                    <span className="text-ink">{s.line}</span> · {s.recipe}
-                  </li>
+              <ul className="mt-2 flex flex-col gap-2 text-sm">
+                {item.sources.map((s) => (
+                  <SourceRow
+                    key={`${s.recipeId}\u0000${s.line}`}
+                    source={s}
+                    canEdit={canEdit}
+                    unsent={waitingQuantities.has(`${s.recipeId}\u0000${s.line}\u0000${item.key}`)}
+                    onConfirm={(q) => void confirm(item, s, q)}
+                    onClear={() => void unconfirm(item, s)}
+                  />
                 ))}
               </ul>
             )}
             {canEdit && (
               <div className="mt-2 flex flex-wrap gap-2">
+                {item.sources.some((s) => s.read && !s.confirmed) && <Button kind="plain" onClick={() => void confirmAllRead(item)}>أكّدي كل الكميات المقروءة</Button>}
                 {!have && <Button kind="plain" onClick={() => void mark(item, 'have')}>عندي في البيت</Button>}
                 {have && <Button kind="plain" onClick={() => void mark(item, 'needed')}>أعيديه للشراء</Button>}
                 {!item.pantry && <Button kind="plain" onClick={() => void keepAtHome(item, true)}>دائمًا عندي (كل الأسابيع)</Button>}
@@ -257,5 +279,65 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
         </details>
       )}
     </div>
+  )
+}
+
+// One recipe line of an item. What the parser read from it is only a suggestion: the quantity is added to
+// the item's total once the person confirms it (as read, or after correcting it).
+function SourceRow({ source, canEdit, unsent, onConfirm, onClear }: { source: ItemSource; canEdit: boolean; unsent: boolean; onConfirm: (q: Quantity) => void; onClear: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const start = source.confirmed ?? source.read
+  const [amount, setAmount] = useState(start ? String(Math.round(start.quantity * 100) / 100) : '')
+  const [unit, setUnit] = useState<Unit>(start?.unit ?? null)
+  const quantity = parseAmount(amount)
+
+  return (
+    <li dir="auto" className="flex flex-col gap-1">
+      <span>
+        <span>{source.line}</span> <span className="text-muted">· {source.recipe}{source.times > 1 ? ` (× ${source.times})` : ''}</span>
+      </span>
+      {!editing && (
+        <span className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          {source.confirmed ? (
+            <Badge tone="accent">✓ مؤكَّدة: {formatQuantity(source.confirmed)}</Badge>
+          ) : source.read ? (
+            <span>قُرئت: {formatQuantity(source.read)} (غير محسوبة حتى تؤكديها)</span>
+          ) : (
+            <span>لا كمية مكتوبة (غير محسوبة)</span>
+          )}
+          {unsent && <Badge tone="warn">لم تُرسل بعد</Badge>}
+          {canEdit && !source.confirmed && source.read && <Button kind="plain" onClick={() => onConfirm(source.read as Quantity)}>أكّدي</Button>}
+          {canEdit && <Button kind="plain" onClick={() => setEditing(true)}>{source.confirmed || source.read ? 'عدّلي' : 'أدخلي كمية'}</Button>}
+          {canEdit && source.confirmed && <Button kind="plain" onClick={onClear}>تراجعي</Button>}
+        </span>
+      )}
+      {editing && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (quantity !== null) {
+              onConfirm({ quantity, unit })
+              setEditing(false)
+            }
+          }}
+        >
+          <label className="flex flex-col gap-1 text-xs font-medium">
+            الكمية
+            <input inputMode="decimal" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value)} className="min-h-11 w-24 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium">
+            الوحدة
+            <select value={unit ?? ''} onChange={(e) => setUnit((e.target.value || null) as Unit)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+              {UNITS.map((u) => (
+                <option key={u.unit ?? 'count'} value={u.unit ?? ''}>{u.name}</option>
+              ))}
+            </select>
+          </label>
+          <Button type="submit" disabled={quantity === null}>احفظي وأكّدي</Button>
+          <Button kind="plain" onClick={() => setEditing(false)}>إلغاء</Button>
+        </form>
+      )}
+    </li>
   )
 }

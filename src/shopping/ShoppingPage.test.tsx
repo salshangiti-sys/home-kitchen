@@ -6,7 +6,7 @@ import { memoryStore } from '../offline/store'
 import type { WeekData } from '../plan/api'
 import ShoppingPage, { type ShoppingApi } from './ShoppingPage'
 import type { ShoppingData } from './api'
-import { ADD_KIND, CLEAR_KIND, MARK_KIND, PANTRY_KIND, type Mark, type PantryItem } from './model'
+import { ADD_KIND, CLEAR_KIND, CONFIRM_KIND, MARK_KIND, PANTRY_KIND, UNCONFIRM_KIND, type Confirmation, type Mark, type PantryItem } from './model'
 
 const WEEK = '2026-11-14'
 
@@ -18,7 +18,7 @@ const meal = (id: string, recipe: string | null, title: string, status: 'planned
 // A server that can be made unreachable. While unreachable the page gets what it last read (the copy
 // kept on the device) and every send fails like a missing connection.
 function server(meals: WeekData['meals'], recipes: ShoppingData['recipes']) {
-  const state = { marks: [] as Mark[], pantry: [] as PantryItem[], mode: 'online' as 'online' | 'offline' | 'refuse', last: null as ShoppingData | null }
+  const state = { marks: [] as Mark[], pantry: [] as PantryItem[], confirmations: [] as Confirmation[], mode: 'online' as 'online' | 'offline' | 'refuse', last: null as ShoppingData | null }
   const guard = () => {
     if (state.mode === 'offline') throw new TypeError('Failed to fetch')
     if (state.mode === 'refuse') throw new Error('not allowed')
@@ -34,18 +34,29 @@ function server(meals: WeekData['meals'], recipes: ShoppingData['recipes']) {
     guard()
     state.pantry = a.on === true ? [...state.pantry.filter((p) => p.key !== a.key), { key: String(a.key), label: String(a.label) }] : state.pantry.filter((p) => p.key !== a.key)
   })
+  const sameLine = (c: Confirmation, a: Record<string, unknown>) => c.recipe_id === a.recipe && c.line === a.line && c.item_key === a.key
+  registerHandler(CONFIRM_KIND, 'تأكيد', async (a) => {
+    guard()
+    state.confirmations = [...state.confirmations.filter((c) => !sameLine(c, a)), { recipe_id: String(a.recipe), line: String(a.line), item_key: String(a.key), quantity: Number(a.quantity), unit: (a.unit as Confirmation['unit']) ?? null }]
+  })
+  registerHandler(UNCONFIRM_KIND, 'إلغاء تأكيد', async (a) => { guard(); state.confirmations = state.confirmations.filter((c) => !sameLine(c, a)) })
   const api: ShoppingApi = {
     loadWeek: vi.fn(async () => weekData(meals)),
     loadShopping: vi.fn(async () => {
       if (state.mode === 'offline' && state.last) return state.last
       guard()
-      state.last = { recipes, marks: [...state.marks], pantry: [...state.pantry] }
-      return state.last
+      const read: ShoppingData = { recipes, marks: [...state.marks], pantry: [...state.pantry], confirmations: [...state.confirmations] }
+      state.last = read
+      return read
     }),
   }
   return { state, api }
 }
 
+const meatRecipes = {
+  a: { title: 'كبسة', lines: ['٥٠٠ جرام لحم', 'ملح'] },
+  b: { title: 'مندي', lines: ['١ كيلو لحم'] },
+}
 const recipes = { soup: { title: 'شوربة عدس', lines: ['٢ بصلة', '٣ فصوص ثوم', 'ملح'] } }
 const outbox = { enqueue, pending, flush, subscribe }
 const show = (api: ShoppingApi, canEdit = true) => render(<ShoppingPage canEdit={canEdit} week={WEEK} today={() => WEEK} api={api} outbox={outbox} />)
@@ -172,5 +183,83 @@ describe('the shopping list screen', () => {
     await waitFor(async () => expect((await failures()).length).toBe(1))
     expect(await pending()).toEqual([])
     await waitFor(() => expect(screen.queryByText('تم شراؤه أو متوفر (1)')).toBeNull())
+  })
+
+  describe('confirming quantities', () => {
+    const twoMeals = [meal('m1', 'a', 'كبسة'), meal('m2', 'b', 'مندي')]
+    const openMeat = async () => {
+      const row = (await screen.findByRole('checkbox', { name: /لحم/ })).closest('li') as HTMLElement
+      return row
+    }
+
+    it('shows what was read as a suggestion that is not added, and adds a quantity only after it is confirmed', async () => {
+      const { state, api } = server(twoMeals, meatRecipes)
+      show(api)
+      const row = await openMeat()
+      expect(within(row).queryByText(/المجموع المؤكَّد/)).toBeNull()
+      expect(within(row).getByText(/قُرئت: 500 جرام/)).toBeTruthy()
+
+      fireEvent.click(within(row).getAllByRole('button', { name: 'أكّدي', hidden: true })[0])
+      await waitFor(() => expect(state.confirmations).toEqual([{ recipe_id: 'a', line: '٥٠٠ جرام لحم', item_key: 'لحم', quantity: 500, unit: 'g' }]))
+      expect(await within(row).findByText('500 جرام')).toBeTruthy()
+      expect(within(row).getByText(/غير محسوبة: سطر واحد/)).toBeTruthy() // the kilo of the other recipe is not confirmed
+    })
+
+    it('adds 500 g and 1 kg to 1.5 kg once both are confirmed, with one tap for all that were read', async () => {
+      const { api } = server(twoMeals, meatRecipes)
+      show(api)
+      const row = await openMeat()
+      fireEvent.click(within(row).getByRole('button', { name: 'أكّدي كل الكميات المقروءة', hidden: true }))
+      expect(await within(row).findByText('1.5 كيلو')).toBeTruthy()
+      expect(within(row).queryByText(/غير محسوبة/)).toBeNull()
+    })
+
+    it('lets her correct a quantity (digits in Arabic, another unit) and take a confirmation back', async () => {
+      const { state, api } = server(twoMeals, meatRecipes)
+      show(api)
+      const row = await openMeat()
+      fireEvent.click(within(row).getAllByRole('button', { name: 'عدّلي', hidden: true })[0])
+      fireEvent.change(within(row).getByLabelText('الكمية'), { target: { value: '٢' } })
+      fireEvent.change(within(row).getByLabelText('الوحدة'), { target: { value: 'kg' } })
+      fireEvent.click(within(row).getByRole('button', { name: 'احفظي وأكّدي' }))
+      await waitFor(() => expect(state.confirmations[0]).toMatchObject({ quantity: 2, unit: 'kg' }))
+      expect(await within(row).findByText('2 كيلو')).toBeTruthy()
+      fireEvent.click(within(row).getByRole('button', { name: 'تراجعي', hidden: true }))
+      await waitFor(() => expect(state.confirmations).toEqual([]))
+      await waitFor(() => expect(within(row).queryByText(/المجموع المؤكَّد/)).toBeNull())
+    })
+
+    it('does not accept a quantity that is not a positive number', async () => {
+      const { state, api } = server(twoMeals, meatRecipes)
+      show(api)
+      const row = await openMeat()
+      fireEvent.click(within(row).getAllByRole('button', { name: 'عدّلي', hidden: true })[0])
+      fireEvent.change(within(row).getByLabelText('الكمية'), { target: { value: 'كثير' } })
+      expect((within(row).getByRole('button', { name: 'احفظي وأكّدي' }) as HTMLButtonElement).disabled).toBe(true)
+      expect(state.confirmations).toEqual([])
+    })
+
+    it('confirming with no connection shows the total at once as "not sent yet" and sends it later', async () => {
+      const { state, api } = server(twoMeals, meatRecipes)
+      show(api)
+      const row = await openMeat()
+      state.mode = 'offline'
+      fireEvent.click(within(row).getAllByRole('button', { name: 'أكّدي', hidden: true })[0])
+      expect(await within(row).findByText('500 جرام')).toBeTruthy()
+      await waitFor(async () => expect((await pending()).length).toBe(1))
+      expect(within(row).getAllByText('لم تُرسل بعد').length).toBeGreaterThan(0)
+      state.mode = 'online'
+      await act(async () => void (await flush()))
+      await waitFor(() => expect(state.confirmations.length).toBe(1))
+      await waitFor(() => expect(within(row).queryByText('لم تُرسل بعد')).toBeNull())
+    })
+
+    it('a reader sees the totals but cannot confirm or change a quantity', async () => {
+      const { api } = server(twoMeals, meatRecipes)
+      show(api, false)
+      const row = await openMeat()
+      expect(within(row).queryByRole('button', { name: 'أكّدي', hidden: true })).toBeNull()
+      expect(within(row).queryByRole('button', { name: 'عدّلي', hidden: true })).toBeNull()
+    })
   })
 })
