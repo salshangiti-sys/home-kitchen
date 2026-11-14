@@ -1,6 +1,8 @@
-// One recipe, in the template order: sources, ingredients, method, my notes. Every text is shown
-// exactly as written, each in its own direction (dir="auto") so mixed Arabic/English lines read
-// correctly. The original page text is always one tap away.
+// One recipe, as the app needs it: its title, tags, photos and INGREDIENTS (they feed the shopping list
+// and the prep tasks), planning and cooking history. The details (method, notes, the original text) are
+// read in OneNote: a big button opens the page. The method, notes and original text stay stored (they
+// are read from OneNote and kept in the backup) but are not shown here, and they are never edited here.
+// Every text shown is exactly as written, each in its own direction (dir="auto").
 //
 // A recipe with a OneNote page is read from the page again each time it is opened (for owners and
 // editors), and its text is edited in OneNote; the app edits only its own fields (tags, planning).
@@ -11,7 +13,6 @@ import { Badge, Button, LinkButton, Notice } from '../ui'
 import { loadRecipe, restoreRecipe, setFavorite, setFlagStatus, trashRecipe, type LoadedRecipe } from './api'
 import { explain } from '../offline/readThrough'
 import CookHistory from '../history/CookHistory'
-import VersionHistory from '../history/VersionHistory'
 import FoodGroups from '../nutrition/FoodGroups'
 import PrepTemplates from '../prep/PrepTemplates'
 import PhotoGallery from '../photos/PhotoGallery'
@@ -45,7 +46,6 @@ function describeFlag(flag: string): string {
 export default function RecipePage({ id, canEdit, userId, startLogging = false }: { id: string; canEdit: boolean; userId: string; startLogging?: boolean }) {
   const [loaded, setLoaded] = useState<LoadedRecipe | null | undefined>(undefined)
   const [page, setPage] = useState<PageLink | null>(null)
-  const [pageKnown, setPageKnown] = useState(false) // whether the OneNote link has been looked up yet
   const [reading, setReading] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [moving, setMoving] = useState(false)
@@ -54,11 +54,8 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
   const load = useCallback(() => {
     loadRecipe(id).then(setLoaded, (e: Error) => setError(e.message))
     loadRecipePage(id).then(
-      (link) => {
-        setPage(link)
-        setPageKnown(true)
-      },
-      () => setPage(null), // not known: stays unknown, so a recipe is never offered a restore it may not allow
+      setPage,
+      () => setPage(null),
     )
   }, [id])
   useEffect(load, [load])
@@ -143,11 +140,8 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         )}
         <PhotoGallery recipeId={id} title={doc.title} canEdit={canEdit && !inTrash} />
         <div className="flex flex-wrap gap-2">
-          {!inTrash && (doc.steps.length > 0 || doc.ingredient_groups.some((g) => g.items.length > 0)) && (
-            <LinkButton href={href.cook(id)} kind="primary">وضع الطبخ</LinkButton>
-          )}
+          {page?.web_url && <LinkButton external kind="primary" href={page.web_url}>افتحي الوصفة في OneNote ↗</LinkButton>}
           <Button kind="plain" onClick={toggleFavorite}>{favorite ? '★ في المفضلة' : '☆ أضف للمفضلة'}</Button>
-          {canEdit && page?.web_url && <LinkButton external kind="primary" href={page.web_url}>تعديل في OneNote ↗</LinkButton>}
           {canEdit && !inTrash && <LinkButton href={href.edit(id)}>{page ? 'الوسوم والتخطيط' : 'تعديل'}</LinkButton>}
           {canEdit && !inTrash && !confirming && <Button kind="plain" onClick={() => setConfirming(true)}>نقل إلى سلة المحذوفات</Button>}
         </div>
@@ -167,19 +161,11 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
       </header>
 
       {doc.status === 'link_only' && <LinkOnly doc={doc} />}
-      {doc.status !== 'link_only' && doc.sources.length > 0 && (
-        <Section title="المصدر">
-          <ul className="flex flex-col gap-2">
-            {doc.sources.map((source, i) => (
-              <li key={i}>
-                <SourceLink source={source} />
-              </li>
-            ))}
-          </ul>
-        </Section>
+      {doc.status !== 'link_only' && doc.ingredient_groups.every((g) => g.items.length === 0) && (
+        <Notice>لا مقادير مسجّلة لهذه الوصفة بعد. تُكتب في صفحتها في OneNote، فتظهر هنا ومنها تُبنى المقاضي.</Notice>
       )}
 
-      {doc.ingredient_groups.length > 0 && (
+      {doc.ingredient_groups.some((g) => g.items.length > 0) && (
         <Section title="المقادير">
           <div className="flex flex-col gap-4">
             {doc.ingredient_groups.map((group, g) => (
@@ -196,30 +182,10 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         </Section>
       )}
 
-      {doc.steps.length > 0 && (
-        <Section title="الطريقة">
-          <ol className="flex list-decimal flex-col gap-2 ps-5 marker:font-semibold marker:text-muted">
-            {doc.steps.map((step) => (
-              <li key={step.order} dir="auto" className="leading-relaxed">{step.text}</li>
-            ))}
-          </ol>
-        </Section>
-      )}
-
-      {doc.notes.length > 0 && (
-        <Section title={doc.status === 'note_only' ? 'الملاحظة' : 'ملاحظاتي'}>
-          <ul className="flex flex-col gap-1.5">
-            {doc.notes.map((note, i) => (
-              <li key={i} dir="auto" className="leading-relaxed">{note}</li>
-            ))}
-          </ul>
-        </Section>
-      )}
-
-      {doc.status === 'note_only' && doc.notes.length === 0 && doc.raw_text && (
-        <Section title="الملاحظة">
-          <p dir="auto" className="whitespace-pre-line leading-relaxed">{doc.raw_text}</p>
-        </Section>
+      {page?.web_url && (
+        <p className="text-sm text-muted">
+          الطريقة والملاحظات في OneNote: <a href={page.web_url} target="_blank" rel="noreferrer" className="text-accent underline">افتحي الصفحة</a>.
+        </p>
       )}
 
       <FoodGroups recipeId={id} canEdit={canEdit && !inTrash} />
@@ -227,17 +193,6 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
       <PrepTemplates recipeId={id} canEdit={canEdit && !inTrash} ingredientLines={doc.ingredient_groups.flatMap((g) => g.items.map((item) => item.text))} />
 
       <CookHistory recipeId={id} userId={userId} canLog={!inTrash} startLogging={startLogging} />
-
-      <VersionHistory
-        recipeId={id}
-        currentVersion={loaded.version}
-        restore={!canEdit || inTrash || loaded.version === 0 || !pageKnown ? 'no' : page ? 'linked' : 'yes'}
-        onRestored={load}
-      />
-
-      {(doc.media?.length ?? 0) > 0 && (
-        <p className="text-sm text-muted">في صفحة OneNote الأصلية {doc.media!.length === 1 ? 'صورة أو فيديو لم يُنقل' : `${doc.media!.length} صور أو فيديوهات لم تُنقل`}. إضافة الصور للوصفة قادمة لاحقًا.</p>
-      )}
 
       {flags.length > 0 && (
         <Section title="ملاحظات المراجعة">
@@ -267,12 +222,6 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         </Section>
       )}
 
-      {doc.raw_text && doc.status !== 'note_only' && (
-        <details className="rounded-2xl border border-line bg-surface p-4">
-          <summary className="cursor-pointer font-medium">النص الأصلي كما في OneNote</summary>
-          <p dir="auto" className="mt-3 whitespace-pre-line text-sm leading-relaxed">{doc.raw_text}</p>
-        </details>
-      )}
     </article>
   )
 }
@@ -305,23 +254,6 @@ function Facts({ doc }: { doc: RecipeDoc }) {
     doc.cook_time_min != null && `طبخ ${doc.cook_time_min} دقيقة`,
   ].filter(Boolean)
   return facts.length ? <p className="text-sm text-muted">{facts.join(' · ')}</p> : null
-}
-
-function SourceLink({ source }: { source: RecipeDoc['sources'][number] }) {
-  const link = safeHref(source.url)
-  const content = (
-    <>
-      {source.platform && <Badge>{PLATFORM_LABELS[source.platform] ?? source.platform}</Badge>}
-      <span dir="auto" className="break-all">{source.label || source.url}</span>
-    </>
-  )
-  // An address that is not a web address is shown, not linked.
-  if (!link) return <span className="inline-flex flex-wrap items-center gap-2">{content}</span>
-  return (
-    <a href={link} target="_blank" rel="noreferrer" className="inline-flex flex-wrap items-center gap-2 text-accent underline">
-      {content}
-    </a>
-  )
 }
 
 function LinkOnly({ doc }: { doc: RecipeDoc }) {
