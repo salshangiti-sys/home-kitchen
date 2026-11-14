@@ -15,6 +15,7 @@ import { explain } from '../offline/readThrough'
 import CookHistory from '../history/CookHistory'
 import FoodGroups from '../nutrition/FoodGroups'
 import PrepTemplates from '../prep/PrepTemplates'
+import { loadSuggestions, usableIngredients, type Suggestion } from '../ingredients/api'
 import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { safeHref } from './safeUrl'
@@ -47,12 +48,14 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
   const [loaded, setLoaded] = useState<LoadedRecipe | null | undefined>(undefined)
   const [page, setPage] = useState<PageLink | null>(null)
   const [reading, setReading] = useState(false)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [confirming, setConfirming] = useState(false)
   const [moving, setMoving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     loadRecipe(id).then(setLoaded, (e: Error) => setError(e.message))
+    loadSuggestions(id).then(setSuggestions, () => setSuggestions([])) // proposed ingredients: a side detail, never blocks the page
     loadRecipePage(id).then(
       setPage,
       () => setPage(null),
@@ -91,6 +94,9 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
   if (loaded === null) return <Notice>لم تُعثر على هذه الوصفة.</Notice>
 
   const { doc, favorite, flags, trashedAt } = loaded
+  const oneNoteLines = doc.ingredient_groups.flatMap((g) => g.items.map((item) => item.text))
+  const used = usableIngredients(oneNoteLines, suggestions)
+  const waiting = oneNoteLines.length === 0 ? suggestions.filter((s) => s.status === 'suggested').length : 0
   const inTrash = trashedAt !== null
   const move = async (work: () => Promise<void>, then: () => void) => {
     setMoving(true)
@@ -161,8 +167,25 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
       </header>
 
       {doc.status === 'link_only' && <LinkOnly doc={doc} />}
-      {doc.status !== 'link_only' && doc.ingredient_groups.every((g) => g.items.length === 0) && (
+      {doc.status !== 'link_only' && used.from === 'none' && waiting === 0 && (
         <Notice>لا مقادير مسجّلة لهذه الوصفة بعد. تُكتب في صفحتها في OneNote، فتظهر هنا ومنها تُبنى المقاضي.</Notice>
+      )}
+
+      {waiting > 0 && (
+        <Notice>
+          {waiting} {waiting === 1 ? 'مقدار مقترح' : 'مقدارًا مقترحًا'} من نص الوصفة بانتظار تأكيدك. <a href={href.ingredients} className="underline">راجعيها</a>
+        </Notice>
+      )}
+
+      {used.from === 'app' && (
+        <Section title="المقادير">
+          <p className="mb-2 text-sm text-muted">لا سطور مقادير في صفحة OneNote؛ هذه المقادير أكّدتِها في التطبيق (منها تُبنى المقاضي).</p>
+          <ul className="flex list-disc flex-col gap-1.5 ps-5 marker:text-muted">
+            {used.lines.map((line) => (
+              <li key={line} dir="auto" className="leading-relaxed">{line}</li>
+            ))}
+          </ul>
+        </Section>
       )}
 
       {doc.ingredient_groups.some((g) => g.items.length > 0) && (
@@ -190,7 +213,7 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
 
       <FoodGroups recipeId={id} canEdit={canEdit && !inTrash} />
 
-      <PrepTemplates recipeId={id} canEdit={canEdit && !inTrash} ingredientLines={doc.ingredient_groups.flatMap((g) => g.items.map((item) => item.text))} />
+      <PrepTemplates recipeId={id} canEdit={canEdit && !inTrash} ingredientLines={used.lines} />
 
       <CookHistory recipeId={id} userId={userId} canLog={!inTrash} startLogging={startLogging} />
 
