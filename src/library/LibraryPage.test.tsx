@@ -25,6 +25,11 @@ vi.mock('./api', async (importOriginal) => ({
   countTrash: async () => 0,
   exportRecipes: async () => [],
 }))
+let ingredientLines: Record<string, string[]> = {}
+vi.mock('./mainIngredient', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./mainIngredient')>()),
+  loadIngredientLines: async () => ingredientLines,
+}))
 vi.mock('../photos/api', () => ({ coverThumbs: async () => new Map() }))
 let cookStats = new Map<string, { count: number; lastOn: string }>()
 vi.mock('../history/api', async (importOriginal) => ({
@@ -46,6 +51,7 @@ beforeEach(() => {
     recipe('soups-001', 'شوربة عدس', 'شوربات', { lunchbox: true }),
   ]
   cookStats = new Map()
+  ingredientLines = {}
   bulkTag.mockReset()
   bulkTag.mockImplementation(async (ids: string[], _changes: unknown, dry: boolean) => ({ changed: ids.length, unchanged: 0, skipped: 0, dry_run: dry }))
   listRecipes.mockClear()
@@ -157,5 +163,56 @@ describe('using the cooking history', () => {
     expect(screen.queryByText('سلطة فواكه')).toBeNull()
     expect(screen.getByText('سلطة خضراء')).toBeTruthy()
     expect(screen.getByText('شوربة عدس')).toBeTruthy()
+  })
+})
+
+describe('finding a recipe by its main ingredient or her own tag', () => {
+  beforeEach(() => {
+    recipes = [
+      recipe('rice-1', 'كبسة', 'أرز', { custom_tags: ['سريعة'] }),
+      recipe('rice-2', 'رز بالخضار', 'أرز'),
+      recipe('trays-1', 'صينية بطاطس', 'صواني', { custom_tags: ['سريعة', 'عزايم'] }),
+      recipe('fish-1', 'باستا بالروبيان', 'مكرونة'),
+    ]
+    ingredientLines = {
+      'rice-1': ['٢ كوب أرز', 'صدور دجاج مكعبات'],
+      'rice-2': ['٢ كوب أرز', 'ملعقة كبيرة مرق دجاج'], // stock is not chicken
+      'trays-1': ['٥٠٠ جرام لحم مفروم', 'بطاطس'],
+    }
+  })
+
+  it('offers chicken, meat and fish only when some recipe has them, with how many', async () => {
+    render(<LibraryPage canEdit={false} />)
+    expect(await screen.findByRole('button', { name: 'فيها دجاج (1)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'فيها لحم (1)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'فيها سمك وروبيان (1)' })).toBeTruthy() // from the title: no lines
+  })
+
+  it('shows only the recipes with the chosen main ingredient, and all again when it is chosen twice', async () => {
+    render(<LibraryPage canEdit={false} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'فيها دجاج (1)' }))
+    expect(screen.getByText('كبسة')).toBeTruthy()
+    expect(screen.queryByText('رز بالخضار')).toBeNull()
+    expect(screen.queryByText('صينية بطاطس')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'فيها دجاج (1)' }))
+    expect(screen.getByText('رز بالخضار')).toBeTruthy()
+  })
+
+  it('offers her own tags as filters (so a «سريعة» tag finds the quick ones) and combines them with the rest', async () => {
+    render(<LibraryPage canEdit={false} />)
+    fireEvent.click(await screen.findByRole('button', { name: '#سريعة (2)' }))
+    expect(screen.getByText('كبسة')).toBeTruthy()
+    expect(screen.getByText('صينية بطاطس')).toBeTruthy()
+    expect(screen.queryByText('رز بالخضار')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'فيها لحم (1)' }))
+    expect(screen.queryByText('كبسة')).toBeNull()
+    expect(screen.getByText('صينية بطاطس')).toBeTruthy()
+  })
+
+  it('offers no tag filter when no recipe has a tag', async () => {
+    recipes = [recipe('a', 'سلطة', 'سلطات')]
+    render(<LibraryPage canEdit={false} />)
+    await screen.findByText('سلطة')
+    expect(screen.queryByRole('button', { name: /^#/ })).toBeNull()
   })
 })

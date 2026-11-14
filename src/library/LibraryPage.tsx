@@ -9,6 +9,7 @@ import { coverThumbs } from '../photos/api'
 import { listCookStats, localDate, type CookStat } from '../history/api'
 import { SORT_LABELS, cookLine, sortRecipes, type SortMode } from '../history/stats'
 import { matchesQuery, normalizeAr } from './normalize'
+import { PROTEINS, PROTEIN_LABELS, loadIngredientLines, mainIngredients, type Protein } from './mainIngredient'
 import BulkTagPanel from './BulkTagPanel'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
@@ -24,6 +25,9 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [onlyFlagged, setOnlyFlagged] = useState(false)
   const [onlyNeverCooked, setOnlyNeverCooked] = useState(false)
+  const [protein, setProtein] = useState<Protein | null>(null)
+  const [tag, setTag] = useState<string | null>(null)
+  const [lines, setLines] = useState<Record<string, string[]> | null>(null)
   const [sort, setSort] = useState<SortMode>('name')
   const [stats, setStats] = useState<Map<string, CookStat> | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -42,11 +46,21 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
     if (canEdit) countTrash().then(setTrashed, () => undefined)
     coverThumbs().then(setCovers)
     listCookStats().then(setStats, () => undefined) // only for sorting and the line under a recipe
+    loadIngredientLines().then(setLines, () => undefined) // only for finding recipes by chicken / meat / fish
   }, [canEdit])
 
   const sections = useMemo(() => {
     const counts = new Map<string, number>()
     for (const r of data?.recipes ?? []) counts.set(r.section, (counts.get(r.section) ?? 0) + 1)
+    return [...counts].sort((a, b) => a[0].localeCompare(b[0], 'ar'))
+  }, [data])
+
+  // chicken / meat / fish per recipe, from its ingredient lines and title (a search aid only)
+  const proteins = useMemo(() => new Map((data?.recipes ?? []).map((r) => [r.id, mainIngredients(r.title, lines?.[r.id] ?? [])])), [data, lines])
+  const proteinCounts = useMemo(() => PROTEINS.map((p) => [p, [...proteins.values()].filter((kinds) => kinds.includes(p)).length] as const).filter(([, n]) => n > 0), [proteins])
+  const tags = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of data?.recipes ?? []) for (const name of r.custom_tags ?? []) counts.set(name, (counts.get(name) ?? 0) + 1)
     return [...counts].sort((a, b) => a[0].localeCompare(b[0], 'ar'))
   }, [data])
 
@@ -59,10 +73,12 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
         (!onlyFavorites || data.favorites.has(r.id)) &&
         (!onlyFlagged || data.openFlags.has(r.id)) &&
         (!onlyNeverCooked || !stats?.has(r.id)) &&
+        (!protein || proteins.get(r.id)?.includes(protein)) &&
+        (!tag || r.custom_tags?.includes(tag)) &&
         matchesQuery(r.search_norm || normalizeAr(r.title), query),
     )
     return sortRecipes(matching, stats ?? new Map(), sort)
-  }, [data, query, section, status, onlyFavorites, onlyFlagged, onlyNeverCooked, stats, sort])
+  }, [data, query, section, status, onlyFavorites, onlyFlagged, onlyNeverCooked, protein, tag, proteins, stats, sort])
   const neverCooked = useMemo(() => (stats && data ? data.recipes.filter((r) => !stats.has(r.id)).length : 0), [stats, data])
   const today = localDate()
 
@@ -130,6 +146,16 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
         {(Object.keys(STATUS_LABELS) as RecipeStatus[]).map((s) => (
           <button key={s} type="button" className={chip(status === s)} onClick={() => setStatus(status === s ? null : s)}>
             {STATUS_LABELS[s]}
+          </button>
+        ))}
+        {proteinCounts.map(([kind, count]) => (
+          <button key={kind} type="button" className={chip(protein === kind)} onClick={() => setProtein(protein === kind ? null : kind)}>
+            فيها {PROTEIN_LABELS[kind]} ({count})
+          </button>
+        ))}
+        {tags.map(([name, count]) => (
+          <button key={name} type="button" dir="auto" className={chip(tag === name)} onClick={() => setTag(tag === name ? null : name)}>
+            #{name} ({count})
           </button>
         ))}
         {stats && stats.size > 0 && neverCooked > 0 && (
