@@ -4,6 +4,8 @@ import NowPage from './prep/NowPage'
 import PrintPage from './print/PrintPage'
 import ReviewPage from './ingredients/ReviewPage'
 import ShoppingPage from './shopping/ShoppingPage'
+import DictionaryPage from './shopping/DictionaryPage'
+import { LessonsProvider } from './shopping/LessonsContext'
 import PlanPage from './plan/PlanPage'
 import RestorePage from './library/RestorePage'
 import ImportPage from './library/ImportPage'
@@ -92,6 +94,7 @@ export default function App() {
   useFlushWhenOnline(auth.ready && auth.session != null)
 
   return (
+    <LessonsProvider signedIn={auth.ready && auth.session != null}>
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-5 print:max-w-none print:px-0 print:py-0">
       {!cooking && <header className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <a href={href.library}>
@@ -146,6 +149,7 @@ export default function App() {
         {auth.session && !cooking && <div className="print:hidden"><InstallHint /></div>}
       </main>
     </div>
+    </LessonsProvider>
   )
 }
 
@@ -165,6 +169,8 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return <CookMode key={route.id} id={route.id} />
     case 'now':
       return <NowPage canEdit={editor} />
+    case 'dictionary':
+      return <DictionaryPage canEdit={editor} />
     case 'shopping':
       return <ShoppingPage key={route.week ?? 'this'} canEdit={editor} week={route.week} />
     case 'ingredients':

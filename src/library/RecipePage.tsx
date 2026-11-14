@@ -18,6 +18,7 @@ import PrepTemplates from '../prep/PrepTemplates'
 import { loadSuggestions, usableIngredients, type Suggestion } from '../ingredients/api'
 import { orderByRole } from '../shopping/roles'
 import AddToPlan from '../plan/AddToPlan'
+import { useLessonsVersion } from '../shopping/LessonsContext'
 import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { safeHref } from './safeUrl'
@@ -47,6 +48,7 @@ function describeFlag(flag: string): string {
 }
 
 export default function RecipePage({ id, canEdit, userId, startLogging = false }: { id: string; canEdit: boolean; userId: string; startLogging?: boolean }) {
+  useLessonsVersion() // the ingredient order follows what she taught the dictionary
   const [loaded, setLoaded] = useState<LoadedRecipe | null | undefined>(undefined)
   const [page, setPage] = useState<PageLink | null>(null)
   const [reading, setReading] = useState(false)

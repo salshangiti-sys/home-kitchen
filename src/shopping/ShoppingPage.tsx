@@ -12,6 +12,7 @@ import * as plan from '../plan/api'
 import { addDays, isIsoDate, todayIso, weekRange } from '../plan/dates'
 import { loadShopping, shoppingMessage, type ShoppingData } from './api'
 import { ADD_KIND, CLEAR_KIND, CONFIRM_KIND, MARK_KIND, PANTRY_KIND, UNCONFIRM_KIND, buildShoppingList, confirmKey, keyOf, markKey, overlayConfirmations, overlayMarks, pantryKey, plannedRecipes, type Item, type ItemSource, type MarkStatus } from './model'
+import { useLessonsVersion } from './LessonsContext'
 import { UNITS, formatQuantity, formatTotals, parseAmount, type Quantity, type Unit } from './quantity'
 
 export interface ShoppingApi {
@@ -45,6 +46,7 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState('')
+  const lessons = useLessonsVersion() // the list is worked out again when she teaches the dictionary
   const recipesRef = useRef<Array<{ id: string; title: string }>>([])
 
   const load = useCallback(async () => {
@@ -79,7 +81,7 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
       base && weekData && shown
         ? buildShoppingList({ meals: weekData.meals, recipes: base.recipes, marks: shown.marks, pantry: shown.pantry, confirmations: sure?.confirmations })
         : null,
-    [base, weekData, shown, sure],
+    [base, weekData, shown, sure, lessons], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   // Every change is first kept in the outbox (the list shows it at once), then sent. With no connection
@@ -251,6 +253,12 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
         </Notice>
       )}
       {list.freeText.length > 0 && <Notice>وجبات مكتوبة نصًّا بلا وصفة، فلا مقادير لها: {list.freeText.join('، ')}.</Notice>}
+
+      {canEdit && (
+        <p className="text-sm text-muted">
+          صنف ظهر مستقلًّا وهو نفس صنف آخر؟ <a href={href.dictionary} className="underline">علّمي القاموس</a>.
+        </p>
+      )}
 
       {list.sentences.length > 0 && (
         <details className="rounded-2xl border border-line p-3">

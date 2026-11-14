@@ -11,6 +11,7 @@ import { SORT_LABELS, cookLine, sortRecipes, type SortMode } from '../history/st
 import { matchesQuery, normalizeAr } from './normalize'
 import { PROTEINS, PROTEIN_LABELS, loadIngredientLines, mainIngredients, type Protein } from './mainIngredient'
 import BulkTagPanel from './BulkTagPanel'
+import { useLessonsVersion } from '../shopping/LessonsContext'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
 
@@ -27,6 +28,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   const [onlyNeverCooked, setOnlyNeverCooked] = useState(false)
   const [protein, setProtein] = useState<Protein | null>(null)
   const [tag, setTag] = useState<string | null>(null)
+  const lessons = useLessonsVersion()
   const [lines, setLines] = useState<Record<string, string[]> | null>(null)
   const [sort, setSort] = useState<SortMode>('name')
   const [stats, setStats] = useState<Map<string, CookStat> | null>(null)
@@ -56,7 +58,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   }, [data])
 
   // chicken / meat / fish per recipe, from its ingredient lines and title (a search aid only)
-  const proteins = useMemo(() => new Map((data?.recipes ?? []).map((r) => [r.id, mainIngredients(r.title, lines?.[r.id] ?? [])])), [data, lines])
+  const proteins = useMemo(() => new Map((data?.recipes ?? []).map((r) => [r.id, mainIngredients(r.title, lines?.[r.id] ?? [])])), [data, lines, lessons]) // eslint-disable-line react-hooks/exhaustive-deps
   const proteinCounts = useMemo(() => PROTEINS.map((p) => [p, [...proteins.values()].filter((kinds) => kinds.includes(p)).length] as const).filter(([, n]) => n > 0), [proteins])
   const tags = useMemo(() => {
     const counts = new Map<string, number>()

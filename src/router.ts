@@ -10,6 +10,7 @@ export type Route =
   | { name: 'new' }
   | { name: 'plan'; week?: string }
   | { name: 'now' }
+  | { name: 'dictionary' } // teach the ingredient dictionary
   | { name: 'shopping'; week?: string } // what to buy for a plan week
   | { name: 'print'; week?: string; tasks: boolean; shopping?: true } // the week plan as a printable page
   | { name: 'import' }
@@ -29,6 +30,7 @@ export function parseHash(hash: string): Route {
   if (parts[0] === 'new') return { name: 'new' }
   if (parts[0] === 'plan') return /^\d{4}-\d{2}-\d{2}$/.test(parts[1] ?? '') ? { name: 'plan', week: parts[1] } : { name: 'plan' }
   if (parts[0] === 'now') return { name: 'now' }
+  if (parts[0] === 'dictionary') return { name: 'dictionary' }
   if (parts[0] === 'shopping') return /^\d{4}-\d{2}-\d{2}$/.test(parts[1] ?? '') ? { name: 'shopping', week: parts[1] } : { name: 'shopping' }
   if (parts[0] === 'print') {
     const week = /^\d{4}-\d{2}-\d{2}$/.test(parts[1] ?? '') ? parts[1] : undefined
@@ -51,6 +53,7 @@ export const href = {
   new: '#/new',
   plan: (week?: string) => (week ? `#/plan/${week}` : '#/plan'),
   now: '#/now',
+  dictionary: '#/dictionary',
   shopping: (week?: string) => (week ? `#/shopping/${week}` : '#/shopping'),
   print: (week: string | undefined, tasks: boolean, shopping = false) => `#/print${week ? `/${week}` : ''}${shopping ? '/shopping' : tasks ? '/tasks' : ''}`,
   import: '#/import',
