@@ -1,0 +1,49 @@
+# The restore test: builds a throw-away Supabase database from supabase/migrations, then runs the
+# restore rehearsal (supabase/tests/restore_rehearsal.sql): fill a household with data, take the
+# nightly backup, wipe the household, restore it from the file, and require every part to come back
+# identical. The nightly backup in OneDrive is the only copy outside the database, so if a later change
+# breaks the restore (or adds a backup part the restore does not cover), this fails and nothing is
+# published (publish.yml waits for it).
+#
+# - No secrets and no access to the real project: everything runs in a local container on the runner.
+# - Runs on every push to a branch other than main, by hand, and as a step of publish.yml.
+# - Actions are pinned to exact commits (the version is in the comment).
+
+name: Restore test
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: 3.1.0
+
+      # Only the database and what the migrations need around it (auth and storage schemas).
+      - name: Start a local database and apply every migration
+        run: supabase start -x realtime,studio,imgproxy,edge-runtime,logflare,vector,mailpit,postgres-meta,supavisor
+
+      - name: Check that the migrations were applied
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -At \
+            -c "select 'migrations applied: ' || count(*) from supabase_migrations.schema_migrations" \
+            -c "select 'tables: ' || count(*) from pg_tables where schemaname = 'public'"
+
+      - name: Restore rehearsal
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/restore_rehearsal.sql
+
+      - name: Show the local stack's database log when something failed
+        if: failure()
+        run: docker ps -a && docker logs supabase_db_rknhlhrnncmfzkyyzgmd 2>&1 | tail -80

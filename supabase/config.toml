@@ -21,3 +21,7 @@ verify_jwt = false
 
 [functions.nightly-backup]
 verify_jwt = false
+
+[db]
+# The same major version as the hosted project; used by the local database in CI (restore test).
+major_version = 17

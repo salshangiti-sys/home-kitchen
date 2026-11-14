@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { explain, looksOffline, readThrough } from '../offline/readThrough'
 import { normalizeAr } from '../library/normalize'
 import { addDays } from '../plan/dates'
+import { registerHandler, type Op } from '../offline/outbox'
 
 export type PrepKind = 'defrost' | 'wash_chop' | 'marinade' | 'sauce' | 'other'
 export type PrepTiming = 'night_before' | 'morning' | 'before_cooking' | 'at_time'
@@ -156,6 +157,13 @@ export const updateTask = (id: string, t: TaskInput) => rpc('update_prep_task', 
 export const dismissTask = (id: string) => rpc('dismiss_prep_task', { p_id: id })
 export const setDone = (id: string, done: boolean) => rpc('set_task_done', { p_id: id, p_done: done })
 
+// Ticking a task with no connection waits in the outbox and is sent when the connection returns
+// (the last tick of a task wins, and sending it again changes nothing).
+export const TICK_KIND = 'task_done'
+export const tickKey = (id: string) => `${TICK_KEY_PREFIX}${id}`
+const TICK_KEY_PREFIX = 'task_done:'
+registerHandler(TICK_KIND, 'تعليم مهمة', (args) => setDone(String(args.id), args.done === true))
+
 const MESSAGES: Array<[RegExp, string]> = [
   [/bad_timing/, 'اختاري وقتًا محددًا فقط حين يكون التوقيت «في وقت محدد».'],
   [/recipe not found or in the trash/, 'الوصفة غير موجودة أو في سلة المحذوفات.'],
@@ -170,6 +178,21 @@ export function prepMessage(error: unknown): string {
 }
 
 // ---- Pure helpers (tested) ----
+
+// The tasks as the person last left them on this device: ticks that have not reached the server yet
+// are applied on top of what was read, and the tasks they belong to are reported (they show
+// "لم تُرسل بعد").
+export function overlayTicks(tasks: Task[], ops: Op[]): { tasks: Task[]; waiting: Set<string> } {
+  const ticks = new Map<string, Op>()
+  for (const op of ops) if (op.kind === TICK_KIND) ticks.set(String(op.args.id), op)
+  return {
+    tasks: tasks.map((task) => {
+      const op = ticks.get(task.id)
+      return op ? { ...task, done_at: op.args.done === true ? op.at : null } : task
+    }),
+    waiting: new Set(ticks.keys()),
+  }
+}
 
 // 'HH:MM:SS' from the database to 'HH:MM' for showing and for a time input.
 export const shortTime = (time: string | null) => (time ? time.slice(0, 5) : null)

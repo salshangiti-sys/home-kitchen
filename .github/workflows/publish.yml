@@ -53,8 +53,12 @@ jobs:
         with:
           path: dist
 
+  # Publishing waits for the restore test: if the backup could no longer be restored, nothing is published.
+  restore-test:
+    uses: ./.github/workflows/restore-test.yml
+
   deploy:
-    needs: build
+    needs: [build, restore-test]
     # Only the main branch may publish, even when the workflow is started by hand on another branch.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
