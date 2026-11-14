@@ -142,7 +142,6 @@ export const checkNotebook = () => call<CheckSummary>('check')
 export const refreshFromPage = (recipeId: string) => call<RefreshOutcome>('refresh', { recipeId })
 export const addPageAsRecipe = (pageId: string) => call<{ recipeId: string }>('add-page', { pageId })
 export const linkPageToRecipe = (pageId: string, recipeId: string) => call<RefreshOutcome>('link-page', { pageId, recipeId })
-export const linkImportedRecipes = () => call<{ linked: number; missing: number; remaining: boolean }>('link-imported')
 export const createPage = (doc: RecipeDoc, sectionName: string, blank: boolean) =>
   call<{ recipeId: string; webUrl: string | null; clientUrl: string | null }>('create-page', { doc, sectionName, blank })
 
@@ -169,4 +168,26 @@ export function timeAgo(iso: string | null, now = Date.now()): string {
   const hours = Math.round(minutes / 60)
   if (hours < 24) return `قبل ${hours} ساعة`
   return `قبل ${Math.round(hours / 24)} يوم`
+}
+
+// ---- Linking recipes to their pages by title ----
+
+export interface TitleLinkResult {
+  dry_run: boolean
+  linked: number
+  pairs: Array<{ recipe_id: string; recipe_title: string; page_title: string; section_name: string | null }>
+  pages_without_recipe: number
+  recipes_without_page: number
+  ambiguous_titles: string[]
+}
+
+// Previews (dryRun) or does the linking of recipes to the pages the last check found, by the same
+// title. Only a title that exactly one recipe and one page have is linked.
+export async function linkPagesByTitle(dryRun: boolean): Promise<TitleLinkResult> {
+  const { data, error } = await supabase.rpc('link_pages_by_title', { p_dry_run: dryRun })
+  if (error) {
+    if (looksOffline(error)) throw explain(error)
+    throw new Error(error.message === 'no_library' ? 'اربطي مكان الوصفات أولًا.' : error.code === '42501' ? 'ربط الصفحات للمالكة والمحررة فقط.' : error.message)
+  }
+  return data as TitleLinkResult
 }

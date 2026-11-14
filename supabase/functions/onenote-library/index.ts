@@ -6,7 +6,6 @@
 //   check          list the notebook's pages: new ones for review, gone ones, refresh a few
 //   add-page       make a recipe from a page in the review list
 //   link-page      link a page to an existing recipe (e.g. after the page moved)
-//   link-imported  link recipes imported from recipes.json to their pages by page_id
 //   create-page    create a new page with the template for a recipe written in the app (or blank)
 //
 // OneNote is reached only through readCreateOnly(), which has no method that changes or deletes
@@ -24,7 +23,6 @@ import {
   checkLibrary,
   connectLibrary,
   createRecipePage,
-  linkImported,
   linkPage,
   refreshRecipe,
   type LibraryDeps,
@@ -102,8 +100,6 @@ Deno.serve(async (req) => {
         return json(req, { recipeId: await addPage(deps, required(body.pageId, 'pageId')) })
       case 'link-page':
         return json(req, await linkPage(deps, required(body.pageId, 'pageId'), required(body.recipeId, 'recipeId')))
-      case 'link-imported':
-        return json(req, await linkImported(deps))
       case 'create-page': {
         if (!body.doc || typeof body.doc !== 'object') throw new HttpError(400, 'doc is required', 'bad_request')
         const doc = { ...body.doc, id: '' } // always a new recipe

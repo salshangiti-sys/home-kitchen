@@ -44,6 +44,9 @@ jobs:
       - name: Restore rehearsal
         run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/restore_rehearsal.sql
 
+      - name: Linking recipes to OneNote pages by title
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/link_pages_by_title.sql
+
       - name: Show the local stack's database log when something failed
         if: failure()
         run: docker ps -a && docker logs supabase_db_rknhlhrnncmfzkyyzgmd 2>&1 | tail -80

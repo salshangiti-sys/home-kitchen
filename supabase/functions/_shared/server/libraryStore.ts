@@ -192,21 +192,4 @@ export class SupabaseLibraryStore implements LibraryStore {
   async removeUnlinked(pageId: string): Promise<void> {
     check(await this.admin.from('onenote_unlinked_pages').delete().eq('household_id', this.householdId).eq('page_id', pageId), 'update review list')
   }
-
-  async importedWithoutLink(limit: number): Promise<Array<{ recipeId: string; pageId: string }>> {
-    const recipes = check(
-      await this.admin
-        .from('recipes')
-        .select('id,onenote')
-        .eq('household_id', this.householdId)
-        .is('deleted_at', null)
-        .not('onenote->>page_id', 'is', null),
-      'read imported recipes',
-    ) as Array<{ id: string; onenote: { page_id?: string } }>
-    const linked = new Set((await this.links()).map((link) => link.recipeId))
-    return recipes
-      .filter((recipe) => recipe.onenote.page_id && !linked.has(recipe.id))
-      .slice(0, limit)
-      .map((recipe) => ({ recipeId: recipe.id, pageId: recipe.onenote.page_id! }))
-  }
 }

@@ -8,12 +8,12 @@ import { appHome, href, navigate } from '../router'
 import { Button, Card, LinkButton, Notice } from '../ui'
 import { listRecipes, type RecipeSummary } from './api'
 import BackupCard from './BackupCard'
+import TitleLinker from './TitleLinker'
 import {
   addPageAsRecipe,
   checkNotebook,
   connectMicrosoft,
   connectPlace,
-  linkImportedRecipes,
   linkPageToRecipe,
   listMissing,
   libraryLabel,
@@ -154,19 +154,8 @@ export default function OneNotePage() {
                 >
                   {busy ? 'جارٍ…' : 'افحصي الآن'}
                 </Button>
-                <Button
-                  kind="plain"
-                  disabled={busy}
-                  onClick={() =>
-                    act(async () => {
-                      const r = await linkImportedRecipes()
-                      return `رُبطت ${r.linked} وصفة مستوردة بصفحتها.${r.missing ? ` ${r.missing} لم تُعثر صفحتها.` : ''}${r.remaining ? ' بقيت وصفات أخرى، اضغطي مرة ثانية.' : ''}`
-                    })
-                  }
-                >
-                  اربطي الوصفات المستوردة بصفحاتها
-                </Button>
               </div>
+              <TitleLinker onLinked={(text) => { setNotice({ text }); void load() }} />
             </div>
           ) : (
             <form
