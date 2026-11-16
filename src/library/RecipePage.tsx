@@ -17,6 +17,7 @@ import FoodGroups from '../nutrition/FoodGroups'
 import PrepTemplates from '../prep/PrepTemplates'
 import { loadSuggestions, usableIngredients, type Suggestion } from '../ingredients/api'
 import { orderByRole } from '../shopping/roles'
+import { splitByLabels } from './ingredientLabels'
 import AddToPlan from '../plan/AddToPlan'
 import { useLessonsVersion } from '../shopping/LessonsContext'
 import PhotoGallery from '../photos/PhotoGallery'
@@ -196,7 +197,7 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         <Section title="المقادير">
           <p className="mb-2 text-sm text-muted">مرتَّبة للقراءة: نشويات، بروتين، بهارات، خضار، ألبان، ثم الباقي. صفحة OneNote لم تتغير.</p>
           <div className="flex flex-col gap-4">
-            {doc.ingredient_groups.map((group, g) => (
+            {doc.ingredient_groups.flatMap(splitByLabels).map((group, g) => (
               <div key={g}>
                 {group.name !== null && <h4 dir="auto" className="mb-1 font-semibold">{group.name}</h4>}
                 <ul className="flex list-disc flex-col gap-1.5 ps-5 marker:text-muted">

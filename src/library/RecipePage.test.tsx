@@ -32,6 +32,16 @@ afterEach(() => {
 })
 
 describe('a recipe in the app', () => {
+  it('keeps the lines under the label line they were written under, not mixed by kind', async () => {
+    const groups = [{ name: null, items: ['عجينة جلاش', 'الحشوة:', 'جبنة بيضاء', 'نعناع', 'وصوص التغميس:', 'كاسة حليب', 'وملح', 'سمسم'].map((text) => ({ text })) }]
+    api.loadRecipe.mockResolvedValue(loaded({ ...SALAD, ingredient_groups: groups }))
+    render(<RecipePage id="salads-007" canEdit={false} userId="u1" />)
+    expect(await screen.findByRole('heading', { name: 'الحشوة' })).toBeTruthy()
+    const sauce = screen.getByRole('heading', { name: 'وصوص التغميس' }).parentElement as HTMLElement
+    expect(Array.from(sauce.querySelectorAll('li')).map((li) => li.textContent)).toEqual(['وملح', 'كاسة حليب', 'سمسم'])
+    const dough = screen.getByText('عجينة جلاش').closest('ul') as HTMLElement
+    expect(dough.querySelectorAll('li').length).toBe(1)
+  })
   it('shows the ingredients, tags and a big button to the OneNote page', async () => {
     api.loadRecipe.mockResolvedValue(loaded({ ...SALAD, tags: { meal_types: ['lunch'], kid_friendly: true, lunchbox: null, custom: ['سريعة'] } }))
     render(<RecipePage id="salads-007" canEdit={false} userId="u1" />)
