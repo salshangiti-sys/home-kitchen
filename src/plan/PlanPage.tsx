@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { href, navigate } from '../router'
-import { Button, LinkButton, Notice } from '../ui'
+import { Badge, Button, LinkButton, Notice } from '../ui'
 import { listRecipes } from '../library/api'
 import { generateTasks } from '../prep/api'
 import { FOOD_GROUPS, FOOD_GROUP_LABELS, type FoodGroup } from '../nutrition/api'
@@ -13,7 +13,9 @@ import MealRow from './MealRow'
 import PlanSettings, { type SettingsApi } from './PlanSettings'
 import * as real from './api'
 import { addDays, dayLabel, isIsoDate, todayIso, weekRange, weekdayName, weekDays } from './dates'
-import { effectiveGroups, overridesFor, planMessage, slotUnion, type NewMeal, type WeekData } from './api'
+import { effectiveGroups, mainSlot, overridesFor, planMessage, slotUnion, type NewMeal, type PlannedMeal, type Slot, type WeekData } from './api'
+import { addMealOrQueue, isUnsent, realOutbox, unsentKey, unsentMeals, type PlanOutbox } from './offline'
+import { deviceOffline } from '../offline/readThrough'
 import type { RecipeSummary } from '../library/api'
 
 export interface PlanApi extends SettingsApi {
@@ -53,11 +55,13 @@ interface Props {
   canEdit: boolean
   today?: () => string
   api?: PlanApi
+  outbox?: PlanOutbox
 }
 
-export default function PlanPage({ week, canEdit, today = todayIso, api = realApi }: Props) {
+export default function PlanPage({ week, canEdit, today = todayIso, api = realApi, outbox = realOutbox }: Props) {
   const anyDay = isIsoDate(week) ? week : today()
   const [data, setData] = useState<WeekData | null>(null)
+  const [unsent, setUnsent] = useState<PlannedMeal[]>([]) // meals added with no connection, not sent yet
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -74,11 +78,12 @@ export default function PlanPage({ week, canEdit, today = todayIso, api = realAp
         result = await api.loadWeek(anyDay)
       }
       setData(result)
+      setUnsent(unsentMeals(await outbox.pending(), weekDays(result.weekStart)))
     } catch (e) {
       setData((current) => current)
       setError(planMessage(e))
     }
-  }, [api, anyDay, canEdit])
+  }, [api, anyDay, canEdit, outbox])
 
   useEffect(() => {
     setData(null)
@@ -87,15 +92,30 @@ export default function PlanPage({ week, canEdit, today = todayIso, api = realAp
     void load()
   }, [load])
 
+  // Meals waiting to be sent: shown again when one is added or taken back, and the week is read again
+  // when they have been sent.
+  useEffect(
+    () =>
+      outbox.subscribe((event) => {
+        if (event === 'queued') {
+          void outbox.pending().then((ops) => setUnsent(unsentMeals(ops, data ? weekDays(data.weekStart) : [])))
+        } else {
+          void load()
+        }
+      }),
+    [outbox, load, data],
+  )
+
   const act = async (work: () => Promise<unknown>, after?: () => void) => {
     setBusy(true)
     setError(null)
     setNote(null)
     try {
-      await work()
+      const result = await work()
       after?.()
       // Tasks follow the plan: a meal added, moved, skipped or removed changes its prep tasks.
-      if (canEdit) await api.generatePrepTasks?.(anyDay)?.catch(() => undefined)
+      // (Not while the meal is only waiting on this device: they are brought up to date when it is sent.)
+      if (canEdit && result !== 'queued' && !deviceOffline()) await api.generatePrepTasks?.(anyDay)?.catch(() => undefined)
       await load()
     } catch (e) {
       setError(planMessage(e))
@@ -110,8 +130,10 @@ export default function PlanPage({ week, canEdit, today = todayIso, api = realAp
   if (!data) return error ? <Notice tone="error">{error}</Notice> : <p className="text-muted">جارٍ التحميل…</p>
 
   const now = today()
-  const empty = data.meals.length === 0
+  const allMeals = [...data.meals, ...unsent]
+  const empty = allMeals.length === 0
   const thisWeek = days.includes(now)
+  const main = mainSlot(data.slots)?.id
 
   return (
     <div className="flex flex-col gap-5">
@@ -168,17 +190,21 @@ export default function PlanPage({ week, canEdit, today = todayIso, api = realAp
                 {day === now && <span className="ms-2 text-sm font-normal text-accent">اليوم</span>}
               </h3>
               {data.slots.map((slot) => {
-                const meals = data.meals.filter((m) => m.day === day && m.slot_id === slot.id)
+                const meals = allMeals.filter((m) => m.day === day && m.slot_id === slot.id)
                 const union = slotUnion(data.meals, day, slot.id, data.recipeGroups)
                 const effective = effectiveGroups(union, data.overrides, day, slot.id)
                 const isAdding = adding?.day === day && adding.slot === slot.id
                 if (!canEdit && meals.length === 0) return null
+                // One main meal a day by default; the others show when they have a meal or are being added.
+                if (slot.id !== main && meals.length === 0 && !isAdding) return null
                 return (
                   <div key={slot.id} className="flex flex-col gap-2">
                     <h4 className="text-sm font-semibold text-muted">{slot.name}</h4>
                     {meals.length > 0 && (
                       <ul className="flex flex-col gap-2">
-                        {meals.map((meal) => (
+                        {meals.map((meal) => isUnsent(meal) ? (
+                          <UnsentRow key={meal.id} meal={meal} onTakeBack={() => void outbox.discard(unsentKey(meal))} />
+                        ) : (
                           <MealRow
                             key={meal.id}
                             meal={meal}
@@ -220,12 +246,27 @@ export default function PlanPage({ week, canEdit, today = todayIso, api = realAp
                         loadRecipes={api.loadRecipes}
                         busy={busy}
                         onCancel={() => setAdding(null)}
-                        onAdd={(meal: NewMeal) => void act(() => api.addMeal(meal), () => setAdding(null))}
+                        onAdd={(meal: NewMeal, title: string) =>
+                          void act(
+                            async () => {
+                              const how = await addMealOrQueue(meal, title, (m) => api.addMeal(m), outbox)
+                              if (how === 'queued') setNote('لا يوجد اتصال: حُفظت الوجبة على هذا الجهاز وتُرسل تلقائيًا حين يعود الاتصال.')
+                              return how
+                            },
+                            () => setAdding(null),
+                          )
+                        }
                       />
                     )}
                   </div>
                 )
               })}
+              {canEdit && (
+                <OtherMeals
+                  slots={data.slots.filter((s) => s.id !== main && !allMeals.some((m) => m.day === day && m.slot_id === s.id) && !(adding?.day === day && adding.slot === s.id))}
+                  onPick={(slotId) => setAdding({ day, slot: slotId })}
+                />
+              )}
             </section>
           </li>
         ))}
@@ -233,6 +274,33 @@ export default function PlanPage({ week, canEdit, today = todayIso, api = realAp
 
       {canEdit && <PlanSettings startDow={data.startDow} slots={data.slots} people={data.people} api={api} onChanged={() => void load()} />}
     </div>
+  )
+}
+
+// The slots a day does not show yet (breakfast, dinner, snack, dessert…): one tap opens one.
+function OtherMeals({ slots, onPick }: { slots: Slot[]; onPick: (slot: string) => void }) {
+  if (slots.length === 0) return null
+  return (
+    <div role="group" aria-label="وجبات أخرى" className="flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
+      <span className="text-xs text-muted">وجبة أخرى:</span>
+      {slots.map((s) => (
+        <button key={s.id} type="button" aria-label={`إضافة ${s.name}`} onClick={() => onPick(s.id)} className="min-h-9 rounded-full border border-line px-3 text-xs font-medium">
+          + {s.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// A meal added with no connection: it waits on this device, and she can take it back.
+function UnsentRow({ meal, onTakeBack }: { meal: PlannedMeal; onTakeBack: () => void }) {
+  return (
+    <li className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-line px-3 py-2">
+      <span dir="auto" className="font-medium">{meal.title}</span>
+      {meal.servings !== null && <Badge>{meal.servings} {meal.servings === 1 ? 'حصة' : 'حصص'}</Badge>}
+      <Badge tone="warn">لم تُرسل بعد</Badge>
+      <Button kind="plain" onClick={onTakeBack}>إلغاء</Button>
+    </li>
   )
 }
 

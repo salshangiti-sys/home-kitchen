@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { dismissFailure, enqueue, failures, flush, pending, registerHandler, subscribe } from './outbox'
+import { discard, dismissFailure, enqueue, failures, flush, pending, registerHandler, subscribe } from './outbox'
 import { memoryStore } from './store'
 import { setCacheOwner, useStore } from './readThrough'
 
@@ -83,6 +83,21 @@ describe('the outbox', () => {
 
     await dismissFailure(list[0].id)
     expect(await failures()).toEqual([])
+  })
+
+  it('takes a waiting change back', async () => {
+    await enqueue('thing', 'a', { n: 1 })
+    await enqueue('thing', 'b', { n: 2 })
+    await discard('a')
+    expect((await pending()).map((op) => op.key)).toEqual(['b'])
+  })
+
+  it('does not try to send while the device has no connection, and keeps everything', async () => {
+    await enqueue('thing', 'a', { n: 1 })
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    expect(await flush()).toEqual({ sent: 0, failed: 0, left: 1 })
+    expect(sent).toEqual([])
+    expect(await pending()).toHaveLength(1)
   })
 
   it('reports an unknown kind of change as a failure instead of dropping it silently', async () => {

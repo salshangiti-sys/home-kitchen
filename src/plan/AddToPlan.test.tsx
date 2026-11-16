@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { PlanOutbox } from './offline'
 import AddToPlan, { type AddToPlanApi } from './AddToPlan'
 import type { WeekData } from './api'
 
@@ -70,5 +71,19 @@ describe('adding a recipe to the plan from its page', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ أضيفي إلى الخطة' }))
     expect(await screen.findByText(/لا خانات وجبات بعد/)).toBeTruthy()
     expect((screen.getByRole('button', { name: 'أضيفي' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('with no connection keeps the meal on the device, says so, and does not call the server', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const a = api()
+    const queued: Array<{ kind: string; args: Record<string, unknown> }> = []
+    const outbox = { enqueue: async (kind: string, _key: string, args: Record<string, unknown>) => void queued.push({ kind, args }), pending: async () => [], subscribe: () => () => undefined, discard: async () => undefined } satisfies PlanOutbox
+    render(<AddToPlan recipeId="rice-1" title="أرز بالدجاج" today={() => '2026-11-15'} api={a} outbox={outbox} />)
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: 'أضيفي' }))
+    expect(await screen.findByText(/لا يوجد اتصال: حُفظت على هذا الجهاز/)).toBeTruthy()
+    expect(a.addMeal).not.toHaveBeenCalled()
+    expect(a.generateTasks).not.toHaveBeenCalled()
+    expect(queued).toEqual([{ kind: 'plan_add', args: { day: '2026-11-15', slot: 'lunch', recipeId: 'rice-1', freeText: null, servings: null, people: [], title: 'أرز بالدجاج' } }])
   })
 })

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { explain, looksOffline, OFFLINE_MESSAGE, OFFLINE_NO_COPY, readThrough, save, saved, setCacheOwner, useStore } from './readThrough'
 import { memoryStore } from './store'
 
@@ -18,6 +18,21 @@ describe('reads with a saved copy', () => {
     await setCacheOwner('u1')
     expect(await readThrough('list', async () => ['a', 'b'])).toEqual(['a', 'b'])
     expect(await readThrough('list', offline)).toEqual(['a', 'b'])
+  })
+
+  it('with the device offline, shows the saved copy at once without trying the network', async () => {
+    await setCacheOwner('u1')
+    await readThrough('list', async () => ['a'])
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+    const load = vi.fn(async () => ['new'])
+    expect(await readThrough('list', load)).toEqual(['a'])
+    expect(load).not.toHaveBeenCalled()
+  })
+
+  it('with the device offline and no saved copy, it still tries (and then says so)', async () => {
+    await setCacheOwner('u1')
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+    await expect(readThrough('never-seen', offline)).rejects.toThrow(OFFLINE_NO_COPY)
   })
 
   it('never hides a real error behind an old copy', async () => {

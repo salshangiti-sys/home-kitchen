@@ -104,6 +104,17 @@ export default function PrintPage({ week, withTasks, withShopping = false, today
     [data],
   )
 
+  // The page's title is what the browser prints at the top and uses as the saved file's name.
+  const titleWeek = data?.week.weekStart
+  useEffect(() => {
+    if (!titleWeek) return
+    const before = document.title
+    document.title = `جدول أسبوع ${weekRange(titleWeek)}`
+    return () => {
+      document.title = before
+    }
+  }, [titleWeek])
+
   if (!data || !model) return error ? <Notice tone="error">{error}</Notice> : <p className="text-muted">جارٍ التحميل…</p>
 
   const weekStart = data.week.weekStart
@@ -133,8 +144,7 @@ export default function PrintPage({ week, withTasks, withShopping = false, today
 
       <article aria-label="الخطة المطبوعة" className="flex flex-col gap-3">
         <header>
-          <h1 className="text-2xl font-bold">خطة الأسبوع</h1>
-          <p className="text-muted">{weekRange(weekStart)}</p>
+          <h1 className="text-2xl font-bold">جدول أسبوع {weekRange(weekStart)}</h1>
         </header>
 
         {showingTasks && model.before && (

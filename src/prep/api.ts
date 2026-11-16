@@ -111,6 +111,33 @@ export const loadNow = (today: string): Promise<NowData> =>
     return { tasks, meals: await mealsOf(tasks) }
   })
 
+// A planned meal of today or tomorrow, as «الآن» lists it.
+export interface DayMeal {
+  id: string
+  day: string
+  slot: string
+  recipe_id: string | null
+  title: string
+  servings: number | null
+  status: 'planned' | 'cooked' | 'skipped'
+}
+
+// What is planned for today and tomorrow (skipped meals left out), in the order of the day's slots.
+export const loadMealsOn = (today: string): Promise<DayMeal[]> =>
+  readThrough(`now-meals:${today}`, async () => {
+    const [m, s] = await Promise.all([
+      supabase.from('planned_meals').select('id,day,slot_id,recipe_id,title,servings,status').in('day', [today, addDays(today, 1)]).neq('status', 'skipped').order('day').order('position'),
+      supabase.from('meal_slots').select('id,name,position'),
+    ])
+    fail(m.error)
+    fail(s.error)
+    const slots = new Map((s.data as Array<{ id: string; name: string; position: number }>).map((x) => [x.id, x]))
+    return (m.data as Array<{ id: string; day: string; slot_id: string; recipe_id: string | null; title: string; servings: number | string | null; status: DayMeal['status'] }>)
+      .map((row) => ({ id: row.id, day: row.day, slot: slots.get(row.slot_id)?.name ?? '', order: slots.get(row.slot_id)?.position ?? 99, recipe_id: row.recipe_id, title: row.title, servings: row.servings === null ? null : Number(row.servings), status: row.status }))
+      .sort((a, b) => a.day.localeCompare(b.day) || a.order - b.order)
+      .map(({ order: _order, ...meal }) => meal)
+  })
+
 // The tasks of a plan week for printing: the day before it starts too (the evening tasks for the
 // first day's meals fall there), through its last day.
 export const loadWeekTasks = (weekStart: string): Promise<NowData> =>

@@ -12,7 +12,7 @@
 // - The queue belongs to the signed-in person's copy on this device (see readThrough.ts) and is deleted
 //   with it when someone else signs in.
 
-import { looksOffline, save, saved } from './readThrough'
+import { deviceOffline, looksOffline, save, saved } from './readThrough'
 
 export interface Op {
   id: string
@@ -62,6 +62,13 @@ export const enqueue = (kind: string, key: string, args: Record<string, unknown>
     emit('queued')
   })
 
+// Takes a waiting change back (the person cancelled it before it was sent).
+export const discard = (key: string): Promise<void> =>
+  exclusive(async () => {
+    await save('outbox', (await pending()).filter((op) => op.key !== key))
+    emit('queued')
+  })
+
 export const dismissFailure = (id: string): Promise<void> =>
   exclusive(async () => {
     await save('outbox-failures', (await failures()).filter((f) => f.id !== id))
@@ -79,7 +86,8 @@ export const flush = (): Promise<FlushResult> =>
   exclusive(async () => {
     let ops = await pending()
     const result: FlushResult = { sent: 0, failed: 0, left: ops.length }
-    while (ops.length) {
+    // No connection: nothing to try (a try would wait for the network to give up).
+    while (ops.length && !deviceOffline()) {
       const op = ops[0]
       const handler = handlers.get(op.kind)
       try {
