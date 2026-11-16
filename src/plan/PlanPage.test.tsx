@@ -194,7 +194,7 @@ describe('adding meals with no connection', () => {
     const { api } = fake()
     const outbox = fakeOutbox()
     render(<PlanPage canEdit week={undefined} today={() => TODAY} api={api as unknown as PlanApi} outbox={outbox} />)
-    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى عشاء' }))[0])
     fireEvent.click(screen.getByRole('tab', { name: 'نص حر' }))
     fireEvent.change(screen.getByLabelText('الوجبة'), { target: { value: 'بيتزا' } })
     fireEvent.click(screen.getByRole('button', { name: 'أضيفي إلى الخطة' }))
@@ -203,7 +203,7 @@ describe('adding meals with no connection', () => {
     expect(screen.getByText(/حُفظت الوجبة على هذا الجهاز/)).toBeTruthy()
     expect(api.addMeal).not.toHaveBeenCalled()
     expect(api.generatePrepTasks).not.toHaveBeenCalled()
-    expect(outbox.ops[0].args).toMatchObject({ day: TODAY, slot: 'lunch', recipeId: null, freeText: 'بيتزا', title: 'بيتزا' })
+    expect(outbox.ops[0].args).toMatchObject({ day: TODAY, slot: 'dinner', recipeId: null, freeText: 'بيتزا', title: 'بيتزا' })
   })
 
   it('keeps it too when the connection fails while sending', async () => {
@@ -211,7 +211,7 @@ describe('adding meals with no connection', () => {
     api.addMeal.mockRejectedValueOnce(new TypeError('Failed to fetch'))
     const outbox = fakeOutbox()
     render(<PlanPage canEdit today={() => TODAY} api={api as unknown as PlanApi} outbox={outbox} />)
-    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى عشاء' }))[0])
     fireEvent.click(screen.getByRole('tab', { name: 'نص حر' }))
     fireEvent.change(screen.getByLabelText('الوجبة'), { target: { value: 'مكرونة' } })
     fireEvent.click(screen.getByRole('button', { name: 'أضيفي إلى الخطة' }))
@@ -224,7 +224,7 @@ describe('adding meals with no connection', () => {
     const { api } = fake()
     const outbox = fakeOutbox()
     render(<PlanPage canEdit today={() => TODAY} api={api as unknown as PlanApi} outbox={outbox} />)
-    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى عشاء' }))[0])
     fireEvent.click(await screen.findByRole('button', { name: /سلطات/ }))
     fireEvent.click(await screen.findByRole('button', { name: /سلطة خضراء/ }))
     fireEvent.click(screen.getByRole('button', { name: 'أضيفي إلى الخطة' }))
@@ -254,52 +254,52 @@ describe('planning meals', () => {
   it('prepares the default slots the first time an editor opens it', async () => {
     const { api } = fake({ slots: [] })
     show(api, true)
-    expect(await screen.findAllByRole('button', { name: /^\+ أضيفي إلى غداء$/ })).toHaveLength(7)
+    expect(await screen.findAllByRole('button', { name: /^\+ أضيفي إلى عشاء$/ })).toHaveLength(7)
     expect(api.planDefaults).toHaveBeenCalledTimes(1)
   })
 
   it('adds a recipe found by search, with servings and people', async () => {
     const { api } = fake()
     show(api, true)
-    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى عشاء' }))[0])
     fireEvent.change(screen.getByLabelText('بحث عن وصفة'), { target: { value: 'سلطه' } })
     fireEvent.click(await screen.findByRole('button', { name: /سلطة خضراء/ }))
     fireEvent.change(screen.getByLabelText(/عدد الحصص/), { target: { value: '3' } })
     fireEvent.click(screen.getByLabelText('أحمد'))
     fireEvent.click(screen.getByRole('button', { name: 'أضيفي إلى الخطة' }))
-    await waitFor(() => expect(api.addMeal).toHaveBeenCalledWith({ day: TODAY, slot: 'lunch', recipeId: 'salads-001', freeText: null, servings: 3, people: ['p2'] }))
+    await waitFor(() => expect(api.addMeal).toHaveBeenCalledWith({ day: TODAY, slot: 'dinner', recipeId: 'salads-001', freeText: null, servings: 3, people: ['p2'] }))
     expect(await within(day('السبت')).findByText('3 حصص')).toBeTruthy()
   })
 
   it('adds free text', async () => {
     const { api } = fake()
     show(api, true)
-    fireEvent.click((await screen.findAllByRole('button', { name: 'إضافة عشاء' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'إضافة غداء' }))[0])
     fireEvent.click(screen.getByRole('tab', { name: 'نص حر' }))
     expect((screen.getByRole('button', { name: 'أضيفي إلى الخطة' }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.change(screen.getByLabelText('الوجبة'), { target: { value: 'بيتزا' } })
     fireEvent.click(screen.getByRole('button', { name: 'أضيفي إلى الخطة' }))
-    await waitFor(() => expect(api.addMeal).toHaveBeenCalledWith({ day: TODAY, slot: 'dinner', recipeId: null, freeText: 'بيتزا', servings: null, people: [] }))
+    await waitFor(() => expect(api.addMeal).toHaveBeenCalledWith({ day: TODAY, slot: 'lunch', recipeId: null, freeText: 'بيتزا', servings: null, people: [] }))
     expect(await within(day('السبت')).findByText('بيتزا')).toBeTruthy()
   })
 
-  it('shows one main meal (غداء) a day, and the others only when they have a meal or she opens them', async () => {
-    const { api } = fake({ meals: [meal('a', addDays(TODAY, 1), 'dinner', 'شوربة')] })
+  it('shows one main meal (عشاء) a day, and the others only when they have a meal or she opens them', async () => {
+    const { api } = fake({ meals: [meal('a', addDays(TODAY, 1), 'lunch', 'شوربة')] })
     show(api, true)
     await screen.findByText('شوربة')
-    expect(within(day('السبت')).getByText('غداء')).toBeTruthy()
-    expect(within(day('السبت')).queryByText('عشاء')).toBeNull()
-    expect(within(day('الأحد')).getByText('عشاء')).toBeTruthy() // a day with a dinner shows it
-    fireEvent.click(within(day('السبت')).getByRole('button', { name: 'إضافة عشاء' }))
     expect(within(day('السبت')).getByText('عشاء')).toBeTruthy()
-    expect(within(day('السبت')).queryByRole('button', { name: 'إضافة عشاء' })).toBeNull() // it is open now
+    expect(within(day('السبت')).queryByText('غداء')).toBeNull()
+    expect(within(day('الأحد')).getByText('غداء')).toBeTruthy() // a day with a lunch shows it
+    fireEvent.click(within(day('السبت')).getByRole('button', { name: 'إضافة غداء' }))
+    expect(within(day('السبت')).getByText('غداء')).toBeTruthy()
+    expect(within(day('السبت')).queryByRole('button', { name: 'إضافة غداء' })).toBeNull() // it is open now
   })
 
   it('lists the sections first, then the recipes of the one she picks (a search still looks everywhere)', async () => {
     const { api } = fake()
     api.loadRecipes.mockResolvedValue([recipe('a', 'شوربة عدس', 'شربة'), recipe('b', 'فتوش', 'فتات وسلطات'), recipe('c', 'تبولة', 'فتات وسلطات'), recipe('d', 'فطائر', 'فطور')])
     show(api, true)
-    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى عشاء' }))[0])
     const sections = await screen.findByRole('group', { name: 'أقسام الوصفات' })
     const names = within(sections).getAllByRole('button').map((b) => b.textContent)
     expect(names).toEqual(['فطور1', 'فتات وسلطات2', 'شربة1']) // her order, with the count
@@ -317,7 +317,7 @@ describe('planning meals', () => {
     const { api } = fake()
     api.loadRecipes.mockResolvedValue([])
     show(api, true)
-    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى عشاء' }))[0])
     expect(await screen.findByText(/لا وصفات في المكتبة بعد/)).toBeTruthy()
   })
 
