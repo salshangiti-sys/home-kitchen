@@ -38,6 +38,10 @@ function fakeApi(pending: Pending = { pages: [], checkedAt: null }): Fake {
     removeTask: async (id) => {
       state.edits.push(`remove ${id}`)
     },
+    refreshFromOneNote: async (id) => {
+      state.edits.push(`refresh ${id}`)
+      return { status: 'ok' as const, error: null }
+    },
     approveRecipes: async (ids) => {
       state.reviewed.push(...ids)
     },
@@ -219,5 +223,26 @@ describe('changing a recipe right in the list', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(await screen.findByText('تعدّلت هذه الوصفة من مكان آخر')).toBeTruthy()
     expect(fake.edits).toEqual([])
+  })
+})
+
+describe('reading recipes from OneNote without leaving the list', () => {
+  it('reads one recipe from its row', async () => {
+    const fake = fakeApi()
+    render(<OverviewPage api={fake} />)
+    await screen.findByText('إيدام دجاج بالكريمة')
+    fireEvent.click(screen.getByText('افتحي الكل'))
+    fireEvent.click(screen.getAllByRole('button', { name: 'اقرئيها من OneNote الآن' })[0])
+    expect(await screen.findByText('قُرئت «إيدام دجاج بالكريمة» من OneNote.')).toBeTruthy()
+    expect(fake.edits).toEqual(['refresh a'])
+  })
+
+  it('reads all the recipes shown, one after the other, when there are few', async () => {
+    const fake = fakeApi()
+    render(<OverviewPage api={fake} />)
+    await screen.findByText('إيدام دجاج بالكريمة')
+    fireEvent.click(screen.getByRole('button', { name: 'اقرئي الظاهرة من OneNote (2)' }))
+    expect(await screen.findByText('قُرئت 2 من 2 وصفة من OneNote.')).toBeTruthy()
+    expect(fake.edits).toEqual(['refresh a', 'refresh b'])
   })
 })

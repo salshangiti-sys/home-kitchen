@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { href } from '../router'
 import { Badge, Button, Card, LinkButton, Notice } from '../ui'
-import { addPageAsRecipe, checkNotebook, listUnlinked, loadLibrary, timeAgo, type CheckSummary, type UnlinkedPage } from '../library/onenote'
+import { addPageAsRecipe, checkNotebook, listUnlinked, loadLibrary, refreshFromPage, timeAgo, type CheckSummary, type UnlinkedPage } from '../library/onenote'
 import { sectionsOf } from '../library/sections'
 import { loadRecipe, saveRecipe, setFlagStatus } from '../library/api'
 import { autofillRecipe } from './apply'
@@ -26,6 +26,7 @@ export interface OverviewApi {
   approve: (pageId: string) => Promise<{ recipeId: string; filled: Autofill | null }> // makes the recipe, and fills in a starting set
   approveRecipes: (flagIds: string[]) => Promise<void> // she has reviewed these recipes
   checkNow: () => Promise<CheckSummary>
+  refreshFromOneNote: (recipeId: string) => Promise<{ status: 'ok' | 'missing' | 'error'; error: string | null }> // reads the recipe's page now
   setTags: (recipeId: string, tags: string[]) => Promise<void>
   setGroups: (recipeId: string, groups: FoodGroup[]) => Promise<void>
   saveTask: (recipeId: string, id: string | null, task: TemplateInput) => Promise<string> // the task's id
@@ -47,6 +48,7 @@ const real: OverviewApi = {
     for (const id of flagIds) await setFlagStatus(id, 'reviewed')
   },
   checkNow: checkNotebook,
+  refreshFromOneNote: refreshFromPage,
   setTags: async (recipeId, tags) => {
     const loaded = await loadRecipe(recipeId)
     if (!loaded) throw new Error('الوصفة غير موجودة.')
@@ -61,6 +63,9 @@ const real: OverviewApi = {
 export const PENDING_EVENT = 'pending-pages'
 const announce = (count: number) => window.dispatchEvent(new CustomEvent(PENDING_EVENT, { detail: count }))
 
+// The most recipes read from OneNote in one go: each read takes about ten seconds.
+const MAX_REFRESH = 8
+
 const chip = (active: boolean) => `min-h-9 shrink-0 rounded-full border px-3 text-sm ${active ? 'border-accent bg-accent text-on-accent' : 'border-line text-ink'}`
 
 interface RowActions {
@@ -70,6 +75,7 @@ interface RowActions {
   onSaveTask: (id: string, task: TemplateInput) => void
   onRemoveTask: (id: string) => void
   onAddTask: (task: TemplateInput) => void
+  onRefresh: () => void
 }
 
 function Row({ row, open, busy, error, actions }: { row: OverviewRow; open: boolean; busy: boolean; error: string | null; actions: RowActions }) {
@@ -126,6 +132,7 @@ function Row({ row, open, busy, error, actions }: { row: OverviewRow; open: bool
               اعتمدي
             </Button>
           )}
+          <Button kind="plain" disabled={busy} onClick={actions.onRefresh}>اقرئيها من OneNote الآن</Button>
           <LinkButton href={href.recipe(row.id)}>افتحي الوصفة</LinkButton>
         </div>
       </div>
@@ -327,6 +334,27 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
         </button>
       </div>
 
+      {shown.length > 0 && shown.length <= MAX_REFRESH && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Button
+            kind="plain"
+            disabled={busy}
+            onClick={() =>
+              void act(async () => {
+                let ok = 0
+                for (const row of shown) {
+                  const outcome = await api.refreshFromOneNote(row.id)
+                  if (outcome.status === 'ok') ok += 1
+                }
+                return { text: `قُرئت ${ok} من ${shown.length} وصفة من OneNote.` }
+              })
+            }
+          >
+            {busy ? 'جارٍ القراءة… (نحو 10 ثوانٍ لكل وصفة)' : `اقرئي الظاهرة من OneNote (${shown.length})`}
+          </Button>
+        </div>
+      )}
+
       {problem === 'awaiting' && waitingShown.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface p-3 text-sm">
           {confirmingAll ? (
@@ -366,6 +394,11 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
               busy={busy}
               error={rowError?.id === row.id ? rowError.text : null}
               actions={{
+                onRefresh: () =>
+                  void act(async () => {
+                    const outcome = await api.refreshFromOneNote(row.id)
+                    return { text: outcome.status === 'ok' ? `قُرئت «${row.title}» من OneNote.` : `تعذّرت قراءة «${row.title}» من OneNote: ${outcome.error ?? ''}` }
+                  }),
                 onApprove: (flagIds) =>
                   void act(async () => {
                     await api.approveRecipes(flagIds)

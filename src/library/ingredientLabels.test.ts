@@ -43,6 +43,9 @@ describe('several ingredients in one stored line', () => {
     expect(splitInline('توست بدون الأطراف\uFFFC٥٠٠ غ لحم مفروم\uFFFC حبة بصل')).toEqual(['توست بدون الأطراف', '٥٠٠ غ لحم مفروم', 'حبة بصل'])
     expect(splitInline('ملح')).toEqual(['ملح'])
   })
+  it('splits at real line breaks too, dropping the tabs OneNote leaves around them', () => {
+    expect(splitInline('للزينة: \r\n\t\t\tصنوبر\r\n\t\t\tرمان\r\n\t\t\tكزبرة')).toEqual(['للزينة:', 'صنوبر', 'رمان', 'كزبرة'])
+  })
   it('shows each piece as its own line', () => {
     const parts = splitByLabels({ name: null, items: [{ text: 'جبن موزاريلا\uFFFCجبن تشيدر' }, { text: 'ملح' }] })
     expect(parts[0].items.map((i) => i.text)).toEqual(['جبن موزاريلا', 'جبن تشيدر', 'ملح'])

@@ -9,9 +9,10 @@ import type { IngredientItem } from './types'
 const COLON = /[:：]$/
 const MAX_LABEL_WORDS = 6
 
-// OneNote marks a line break inside one bullet with an invisible object character (U+FFFC), so several
-// ingredients can come as one stored line. They are shown, and bought, as separate lines.
-const INLINE_BREAK = /\uFFFC/
+// OneNote marks a line break inside one bullet with an invisible object character (U+FFFC), or the page
+// text has real line breaks inside one paragraph, so several ingredients can come as one stored line.
+// They are shown, and bought, as separate lines.
+const INLINE_BREAK = /[\uFFFC\r\n]+/
 export const splitInline = (text: string): string[] => text.split(INLINE_BREAK).map((piece) => piece.trim()).filter(Boolean)
 
 export const isLabelLine = (text: string): boolean => {
