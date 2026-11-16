@@ -89,8 +89,11 @@ const LABEL_TO_KEY = new Map<string, SectionKey>(
   SECTION_KEYS.map((key) => [normalizeForCompare(SECTION_HEADINGS[key]), key]),
 )
 
+// A label may end with a colon on hand-written pages («المقادير:»).
+const withoutTrailingColon = (text: string) => text.replace(/\s*[:：]\s*$/, '')
+
 function labelKey(block: Block): SectionKey | null {
-  return LABEL_TO_KEY.get(normalizeForCompare(block.text)) ?? null
+  return LABEL_TO_KEY.get(normalizeForCompare(withoutTrailingColon(block.text))) ?? null
 }
 
 function nonEmpty(block: Block): boolean {
