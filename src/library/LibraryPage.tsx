@@ -12,6 +12,7 @@ import { matchesQuery, normalizeAr } from './normalize'
 import { SECTION_SEPARATOR, inSection, sectionsOf, subsectionsOf } from './sections'
 import { PROTEINS, PROTEIN_LABELS, loadIngredientLines, mainIngredients, type Protein } from './mainIngredient'
 import BulkTagPanel from './BulkTagPanel'
+import { tintFor } from '../tints'
 import { useLessonsVersion } from '../shopping/LessonsContext'
 import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
@@ -30,6 +31,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   const [onlyNeverCooked, setOnlyNeverCooked] = useState(false)
   const [protein, setProtein] = useState<Protein | null>(null)
   const [tag, setTag] = useState<string | null>(null)
+  const [moreFilters, setMoreFilters] = useState(false)
   const lessons = useLessonsVersion()
   const [lines, setLines] = useState<Record<string, string[]> | null>(null)
   const [sort, setSort] = useState<SortMode>('name')
@@ -115,7 +117,11 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   if (!data) return <p className="text-muted">جارٍ التحميل…</p>
 
   const chip = (active: boolean) =>
-    `min-h-9 rounded-full border px-3 text-sm ${active ? 'border-accent bg-accent text-on-accent' : 'border-line text-ink'}`
+    `min-h-9 rounded-full border px-3 text-sm ${active ? 'border-accent bg-accent text-on-accent' : 'border-line bg-surface text-ink'}`
+  // Section and tag chips each keep their own soft colour.
+  const tinted = (name: string, active: boolean) =>
+    `min-h-9 shrink-0 rounded-full px-3 text-sm font-medium ${active ? 'bg-accent text-on-accent' : tintFor(name)}`
+  const activeFilters = [onlyFavorites, status !== null, protein !== null, tag !== null, onlyNeverCooked, onlyFlagged].filter(Boolean).length
 
   return (
     <div className="flex flex-col gap-4">
@@ -134,7 +140,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
           الكل ({data.recipes.length})
         </button>
         {sections.map(([name, count]) => (
-          <button key={name} type="button" dir="auto" className={`${chip(section === name)} shrink-0`} onClick={() => { setSection(section === name ? null : name); setSub(null) }}>
+          <button key={name} type="button" dir="auto" className={tinted(name, section === name)} onClick={() => { setSection(section === name ? null : name); setSub(null) }}>
             {name} ({count})
           </button>
         ))}
@@ -146,13 +152,23 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
             كل {section}
           </button>
           {subsections.map(([name, count]) => (
-            <button key={name} type="button" dir="auto" className={`${chip(sub === name)} shrink-0`} onClick={() => setSub(sub === name ? null : name)}>
+            <button key={name} type="button" dir="auto" className={tinted(name, sub === name)} onClick={() => setSub(sub === name ? null : name)}>
               {name} ({count})
             </button>
           ))}
         </div>
       )}
 
+      <button
+        type="button"
+        aria-expanded={moreFilters}
+        onClick={() => setMoreFilters(!moreFilters)}
+        className="min-h-10 self-start rounded-full bg-accent-soft px-4 text-sm font-medium text-accent"
+      >
+        {moreFilters ? 'أخفي التصفية' : 'تصفية أكثر'}{activeFilters > 0 ? ` (${activeFilters})` : ''}
+      </button>
+
+      {(moreFilters || activeFilters > 0) && (
       <div className="flex flex-wrap gap-2 text-sm">
         <button type="button" className={chip(onlyFavorites)} onClick={() => setOnlyFavorites(!onlyFavorites)}>
           ★ المفضلة
@@ -168,7 +184,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
           </button>
         ))}
         {tags.map(([name, count]) => (
-          <button key={name} type="button" dir="auto" className={chip(tag === name)} onClick={() => setTag(tag === name ? null : name)}>
+          <button key={name} type="button" dir="auto" className={tinted(name, tag === name)} onClick={() => setTag(tag === name ? null : name)}>
             #{name} ({count})
           </button>
         ))}
@@ -183,6 +199,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
           </button>
         )}
       </div>
+      )}
 
       {data.recipes.length === 0 ? (
         <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-line p-6 text-center">
@@ -263,23 +280,29 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
 }
 
 function RecipeRow({ recipe, cover, favorite, flagged, cooked }: { recipe: RecipeSummary; cover?: string; favorite: boolean; flagged: boolean; cooked: string | null }) {
+  const tags = (recipe.custom_tags ?? []).slice(0, 2)
   return (
     <li>
-      <a href={href.recipe(recipe.id)} className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+      <a href={href.recipe(recipe.id)} className="flex min-h-16 items-center gap-3 rounded-3xl bg-surface p-2.5 pe-4 shadow-sm ring-1 ring-line">
         {cover ? (
-          <img src={cover} alt="" loading="lazy" className="size-12 shrink-0 rounded-lg border border-line object-cover" />
+          <img src={cover} alt="" loading="lazy" className="size-14 shrink-0 rounded-2xl object-cover" />
         ) : (
-          <span aria-hidden className="text-xl">{STATUS_ICONS[recipe.status]}</span>
+          <span aria-hidden className={`grid size-14 shrink-0 place-items-center rounded-2xl text-2xl ${tintFor(recipe.section)}`}>{STATUS_ICONS[recipe.status]}</span>
         )}
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span dir="auto" className="truncate font-medium">{recipe.title}</span>
-          <span dir="auto" className="text-sm text-muted">{recipe.section}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span dir="auto" className="truncate text-base font-semibold">{recipe.title}</span>
+          <span className="flex flex-wrap items-center gap-1">
+            <span dir="auto" className={`rounded-full px-2 py-0.5 text-xs font-medium ${tintFor(recipe.section)}`}>{recipe.section}</span>
+            {tags.map((name) => (
+              <span key={name} dir="auto" className={`rounded-full px-2 py-0.5 text-xs ${tintFor(name)}`}>{name}</span>
+            ))}
+          </span>
           {cooked && <span className="text-xs text-muted">{cooked}</span>}
         </span>
-        <span className="flex shrink-0 items-center gap-1">
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          {favorite && <span aria-label="مفضلة" className="text-lg text-amber-500">★</span>}
           {recipe.status !== 'complete' && <Badge tone={recipe.status === 'partial' ? 'warn' : 'plain'}>{STATUS_LABELS[recipe.status]}</Badge>}
           {flagged && <Badge tone="warn">مراجعة</Badge>}
-          {favorite && <span aria-label="مفضلة" className="text-amber-500">★</span>}
         </span>
       </a>
     </li>

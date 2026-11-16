@@ -25,12 +25,7 @@ import RecipeEditor from './library/RecipeEditor'
 import RecipePage from './library/RecipePage'
 import { href, useRoute, type Route } from './router'
 import { applyTheme, loadPreference, resolveTheme, savePreference, type ThemePreference } from './theme'
-
-const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
-  { value: 'system', label: 'حسب الجهاز' },
-  { value: 'light', label: 'فاتح' },
-  { value: 'dark', label: 'داكن' },
-]
+import Menu, { type MenuItem } from './Menu'
 
 // The Microsoft sign-in returns to /?ms=…#/onenote (the OneNote page); without a page, go there.
 if (new URLSearchParams(window.location.search).has('ms') && !window.location.hash) window.location.hash = href.onenote
@@ -94,16 +89,16 @@ function useBackupAlert(enabled: boolean): BackupState | null {
   return state && needsAttention(state) ? state : null
 }
 
-const NAV: Array<{ label: string; to: string; match: Route['name'][]; editorsOnly?: boolean }> = [
-  { label: 'الوصفات', to: href.library, match: ['library', 'recipe'] },
-  { label: 'الخطة', to: href.plan(), match: ['plan'] },
-  { label: 'الآن', to: href.now, match: ['now'] },
-  { label: 'المقاضي', to: href.shopping(), match: ['shopping'] },
-  { label: 'الفريزر', to: href.freezer, match: ['freezer'] },
-  { label: 'المقادير', to: href.ingredients, match: ['ingredients'], editorsOnly: true },
-  { label: 'مراجعة', to: href.overview, match: ['overview'], editorsOnly: true },
-  { label: 'استيراد', to: href.import, match: ['import'], editorsOnly: true },
-  { label: 'OneNote', to: href.onenote, match: ['onenote'], editorsOnly: true },
+const NAV: Array<{ label: string; hint: string; icon: string; to: string; match: Route['name'][]; editorsOnly?: boolean }> = [
+  { label: 'الوصفات', hint: 'كل وصفاتكِ: ابحثي وصفّي وافتحي الوصفة', icon: '📖', to: href.library, match: ['library', 'recipe'] },
+  { label: 'الخطة', hint: 'خططي وجبات الأسبوع لكل فرد', icon: '🗓', to: href.plan(), match: ['plan'] },
+  { label: 'الآن', hint: 'ما عليكِ اليوم: وجبات وتجهيزات وإذابة', icon: '⏰', to: href.now, match: ['now'] },
+  { label: 'المقاضي', hint: 'قائمة الشراء من خطة الأسبوع', icon: '🛒', to: href.shopping(), match: ['shopping'] },
+  { label: 'الفريزر', hint: 'ما عندكِ مجمّدًا وكميته', icon: '❄️', to: href.freezer, match: ['freezer'] },
+  { label: 'المقادير', hint: 'راجعي مقادير الوصفات واعتمديها', icon: '🧂', to: href.ingredients, match: ['ingredients'], editorsOnly: true },
+  { label: 'مراجعة', hint: 'راجعي الوسوم والتجهيزات واعتمدي الجديد', icon: '✅', to: href.overview, match: ['overview'], editorsOnly: true },
+  { label: 'استيراد', hint: 'استوردي ملف وصفات دفعة واحدة', icon: '📥', to: href.import, match: ['import'], editorsOnly: true },
+  { label: 'OneNote', hint: 'ربط دفتر OneNote وفحص الصفحات والنسخ الاحتياطي', icon: '📓', to: href.onenote, match: ['onenote'], editorsOnly: true },
 ]
 
 export default function App() {
@@ -117,7 +112,19 @@ export default function App() {
   const backupAlert = useBackupAlert(auth.session != null && editor)
   const waiting = usePendingPages(auth.session != null && editor)
   const updateAvailable = useUpdateAvailable()
+  const [menuOpen, setMenuOpen] = useState(false)
+  useEffect(() => setMenuOpen(false), [route])
   useFlushWhenOnline(auth.ready && auth.session != null)
+
+  const items: MenuItem[] = NAV.filter((item) => editor || !item.editorsOnly).map((item) => ({
+    label: item.label,
+    hint: item.hint,
+    to: item.to,
+    icon: item.icon,
+    active: item.match.includes(route.name) || (route.name === 'edit' && item.to === href.library),
+    badge: item.to === href.overview ? waiting : undefined,
+  }))
+  const current = items.find((item) => item.active)
 
   return (
     <LessonsProvider signedIn={auth.ready && auth.session != null}>
@@ -130,45 +137,27 @@ export default function App() {
           </button>
         </div>
       )}
-      {!cooking && <header className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <a href={href.library}>
-          <h1 className="text-2xl font-bold">مطبخ البيت</h1>
-        </a>
-        <div role="radiogroup" aria-label="المظهر" className="flex rounded-xl border border-line bg-surface p-1">
-          {THEME_OPTIONS.map((option) => (
+      {!cooking && (
+        <header className="flex items-center gap-3 print:hidden">
+          {auth.session && (
             <button
-              key={option.value}
               type="button"
-              role="radio"
-              aria-checked={pref === option.value}
-              onClick={() => choosePref(option.value)}
-              className={`min-h-9 rounded-lg px-3 text-sm font-medium transition-colors ${
-                pref === option.value ? 'bg-accent text-on-accent' : 'text-muted hover:text-ink'
-              }`}
+              aria-label="القائمة"
+              aria-haspopup="dialog"
+              onClick={() => setMenuOpen(true)}
+              className="relative grid size-11 shrink-0 place-items-center rounded-2xl bg-accent-soft text-xl text-accent"
             >
-              {option.label}
+              <span aria-hidden>☰</span>
+              {waiting > 0 && <span aria-label={`${waiting} تنتظر المراجعة`} className="absolute -end-1 -top-1 size-3 rounded-full border-2 border-bg bg-accent" />}
             </button>
-          ))}
-        </div>
-      </header>}
-
+          )}
+          <a href={href.library} className="min-w-0 flex-1">
+            <h1 className="truncate text-2xl font-bold text-accent">{auth.session && current ? current.label : 'مطبخ البيت'}</h1>
+          </a>
+        </header>
+      )}
       {auth.session && !cooking && (
-        <nav aria-label="الأقسام الرئيسية" className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 print:hidden">
-          {NAV.filter((item) => editor || !item.editorsOnly).map((item) => {
-            const active = item.match.includes(route.name) || (route.name === 'edit' && item.to === href.library)
-            return (
-              <a
-                key={item.to}
-                href={item.to}
-                aria-current={active ? 'page' : undefined}
-                className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium ${active ? 'border-accent text-ink' : 'border-transparent text-muted'}`}
-              >
-                {item.label}
-                {item.to === href.overview && waiting > 0 ? ` (${waiting})` : ''}
-              </a>
-            )
-          })}
-        </nav>
+        <Menu open={menuOpen} items={items} pref={pref} onTheme={choosePref} onClose={() => setMenuOpen(false)} />
       )}
 
       <main className="flex flex-col gap-6 pb-10">
