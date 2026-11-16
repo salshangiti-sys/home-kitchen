@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '../ui'
 import { matchesQuery, normalizeAr } from '../library/normalize'
-import { sectionsOf } from '../library/sections'
+import { inSection, sectionsOf } from '../library/sections'
 import type { RecipeSummary } from '../library/api'
 import type { NewMeal, Person } from './api'
 
@@ -37,7 +37,7 @@ export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, o
   // the picked section, or in all of them.
   const searching = query.trim() !== ''
   const found = useMemo(
-    () => (recipes ?? []).filter((r) => (section === null || r.section === section) && matchesQuery(r.search_norm || normalizeAr(r.title), query)),
+    () => (recipes ?? []).filter((r) => (section === null || inSection(r.section, section)) && matchesQuery(r.search_norm || normalizeAr(r.title), query)),
     [recipes, query, section],
   )
   const ready = mode === 'recipe' ? picked !== null : text.trim() !== ''

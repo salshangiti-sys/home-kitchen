@@ -216,3 +216,39 @@ describe('finding a recipe by its main ingredient or her own tag', () => {
     expect(screen.queryByRole('button', { name: /^#/ })).toBeNull()
   })
 })
+
+describe('a big section with sections under it', () => {
+  beforeEach(() => {
+    recipes = [
+      recipe('f-1', 'كرات لحم', 'مفرزنات › كفتة'),
+      recipe('f-2', 'كفتة مشوية', 'مفرزنات › كفتة'),
+      recipe('f-3', 'معجنات جبنة', 'مفرزنات › معجنات'),
+      recipe('s-1', 'شوربة عدس', 'شربة'),
+    ]
+  })
+
+  it('shows one big section with all its recipes, and its sub-sections apart', async () => {
+    render(<LibraryPage canEdit={false} />)
+    const sections = await screen.findByRole('group', { name: 'الأقسام' })
+    expect(sections.textContent).toContain('مفرزنات (3)')
+    expect(sections.textContent).not.toContain('مفرزنات › كفتة')
+    expect(screen.queryByRole('group', { name: 'الأقسام الفرعية' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'مفرزنات (3)' }))
+    expect(screen.getByText('كرات لحم')).toBeTruthy()
+    expect(screen.getByText('معجنات جبنة')).toBeTruthy()
+    expect(screen.queryByText('شوربة عدس')).toBeNull()
+    const subs = screen.getByRole('group', { name: 'الأقسام الفرعية' })
+    expect(subs.textContent).toContain('كفتة (2)')
+    expect(subs.textContent).toContain('معجنات (1)')
+  })
+
+  it('narrows to one sub-section, and back to all of the big section', async () => {
+    render(<LibraryPage canEdit={false} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'مفرزنات (3)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'معجنات (1)' }))
+    expect(screen.getByText('معجنات جبنة')).toBeTruthy()
+    expect(screen.queryByText('كرات لحم')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'كل مفرزنات' }))
+    expect(screen.getByText('كرات لحم')).toBeTruthy()
+  })
+})

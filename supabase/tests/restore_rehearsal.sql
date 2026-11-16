@@ -22,7 +22,7 @@ declare
   b1 jsonb; b2 jsonb; b3 jsonb; exported jsonb; file_a jsonb; file_b jsonb; res jsonb; res2 jsonb;
   part text; key text; n int; log text := '';
   -- the parts the restore brings back, and the parts it leaves out on purpose
-  restored text[] := array['recipes','deleted_recipes','favorites','flags','versions','onenote_pages','cook_log','food_groups','plan_settings','people','meal_slots','week_plans','planned_meals','slot_food_groups','prep_templates','prep_tasks','ingredient_suggestions','shopping_marks','pantry_items','quantity_confirmations','ingredient_aliases'];
+  restored text[] := array['recipes','deleted_recipes','favorites','flags','versions','onenote_pages','cook_log','food_groups','plan_settings','people','meal_slots','week_plans','planned_meals','slot_food_groups','prep_templates','prep_tasks','ingredient_suggestions','shopping_marks','pantry_items','quantity_confirmations','ingredient_aliases','freezer_items'];
   left_out text[] := array['household','members','onenote_library','photos'];
 begin
   insert into auth.users (id) values (owner_id), (viewer_id);
@@ -95,6 +95,9 @@ begin
   -- what she taught the dictionary: "the same as", and an item of its own
   perform public.set_ingredient_alias('فلفل هالبينو', 'فلفل حار', 'produce');
   perform public.set_ingredient_alias('برغل', null, 'pantry');
+  -- what is in the freezer: one item linked to a recipe, one without
+  perform public.save_freezer_item(null, 'كرات لحم', 12, 'كرة', date '2026-11-01', a, 'كيس 500 غ');
+  perform public.save_freezer_item(null, 'صوص طماطم', 3, 'علبة', date '2026-11-05', null, null);
   reset role;
 
   -- a second member's own entries
@@ -152,6 +155,7 @@ begin
   delete from public.shopping_marks where household_id = hh;
   delete from public.pantry_items where household_id = hh;
   delete from public.ingredient_aliases where household_id = hh;
+  delete from public.freezer_items where household_id = hh;
   b2 := public.backup_bundle(hh);
   foreach part in array restored loop
     n := case jsonb_typeof(b2 -> part) when 'array' then jsonb_array_length(b2 -> part) when 'object' then 1 else 0 end;
@@ -192,6 +196,9 @@ begin
   if (res ->> 'ingredient_aliases_added')::int <> 2 then raise exception 'FAILED: the dry run should report 2 dictionary lessons: %', res; end if;
   select count(*) into n from public.ingredient_aliases where household_id = hh;
   if n <> 0 then raise exception 'FAILED: the dry run saved dictionary lessons'; end if;
+  if (res ->> 'freezer_items_added')::int <> 2 then raise exception 'FAILED: the dry run should report 2 freezer items: %', res; end if;
+  select count(*) into n from public.freezer_items where household_id = hh;
+  if n <> 0 then raise exception 'FAILED: the dry run saved freezer items'; end if;
   select count(*) into n from public.quantity_confirmations where household_id = hh;
   if n <> 0 then raise exception 'FAILED: the dry run saved confirmed quantities'; end if;
   select count(*) into n from public.shopping_marks where household_id = hh;
@@ -204,6 +211,7 @@ begin
   if (res ->> 'shopping_marks_added')::int <> 3 or (res ->> 'pantry_items_added')::int <> 2 then raise exception 'FAILED: the restore should add 3 marks and 2 pantry items: %', res; end if;
   if (res ->> 'quantity_confirmations_added')::int <> 3 then raise exception 'FAILED: the restore should add 3 confirmed quantities: %', res; end if;
   if (res ->> 'ingredient_aliases_added')::int <> 2 then raise exception 'FAILED: the restore should add 2 dictionary lessons: %', res; end if;
+  if (res ->> 'freezer_items_added')::int <> 2 then raise exception 'FAILED: the restore should add 2 freezer items: %', res; end if;
   res2 := public.restore_from_backup(file_b, false);
   reset role;
   b3 := public.backup_bundle(hh);

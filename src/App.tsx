@@ -3,6 +3,7 @@ import { canEdit, SignIn, useAuth } from './auth'
 import NowPage from './prep/NowPage'
 import PrintPage from './print/PrintPage'
 import ReviewPage from './ingredients/ReviewPage'
+import FreezerPage from './freezer/FreezerPage'
 import OverviewPage, { PENDING_EVENT } from './review/OverviewPage'
 import { updateNow, useUpdateAvailable } from './update'
 import ShoppingPage from './shopping/ShoppingPage'
@@ -98,6 +99,7 @@ const NAV: Array<{ label: string; to: string; match: Route['name'][]; editorsOnl
   { label: 'الخطة', to: href.plan(), match: ['plan'] },
   { label: 'الآن', to: href.now, match: ['now'] },
   { label: 'المقاضي', to: href.shopping(), match: ['shopping'] },
+  { label: 'الفريزر', to: href.freezer, match: ['freezer'] },
   { label: 'المقادير', to: href.ingredients, match: ['ingredients'], editorsOnly: true },
   { label: 'مراجعة', to: href.overview, match: ['overview'], editorsOnly: true },
   { label: 'استيراد', to: href.import, match: ['import'], editorsOnly: true },
@@ -208,6 +210,8 @@ function Screen({ route, editor, userId }: { route: Route; editor: boolean; user
       return <ShoppingPage key={route.week ?? 'this'} canEdit={editor} week={route.week} />
     case 'ingredients':
       return <ReviewPage canEdit={editor} />
+    case 'freezer':
+      return <FreezerPage canEdit={editor} />
     case 'overview':
       return editor ? <OverviewPage /> : <LibraryPage canEdit={false} />
     case 'print':

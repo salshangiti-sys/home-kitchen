@@ -198,3 +198,59 @@ describe('owners and editors', () => {
     expect(await screen.findByText('لا تملكين صلاحية تعديل المهام.')).toBeTruthy()
   })
 })
+
+describe('what is in the freezer, beside a task that takes something out of it', () => {
+  const frozen = [
+    { id: 'i1', name: 'كرات لحم', quantity: 12, unit: 'كرة', frozen_on: '2026-11-01', recipe_id: null, note: null },
+    { id: 'i2', name: 'صوص طماطم', quantity: 3, unit: 'علبة', frozen_on: '2026-11-05', recipe_id: null, note: null },
+  ]
+  const withFreezer = (tasks: Task[]) => {
+    let items = frozen
+    const api = fake(tasks) as ReturnType<typeof fake> & { loadFreezer: ReturnType<typeof vi.fn>; useFreezerItem: ReturnType<typeof vi.fn> }
+    api.loadFreezer = vi.fn(async () => items)
+    api.useFreezerItem = vi.fn(async (id: string) => {
+      items = items.map((i) => (i.id === id ? { ...i, quantity: i.quantity - 1 } : i))
+      return 1
+    })
+    return api
+  }
+
+  it('shows what is there when a take-out task is open, and takes one off with «استعملت»', async () => {
+    const api = withFreezer([task('d', TODAY, 'morning', 'أخرجي اللحم من الفريزر', { kind: 'defrost' })])
+    show(api, true)
+    const card = await screen.findByRole('region', { name: 'في الفريزر' })
+    expect(within(card).getByText(/كرات لحم/)).toBeTruthy()
+    fireEvent.click(within(card).getAllByRole('button', { name: 'استعملت' })[0])
+    await waitFor(() => expect(api.useFreezerItem).toHaveBeenCalledWith('i1'))
+    expect(await within(card).findByText(/11 كرة/)).toBeTruthy()
+  })
+
+  it('stays out of the way when there is no take-out task, or when the task is done, or nothing is in the freezer', async () => {
+    show(withFreezer([task('a', TODAY, 'morning', 'اغسلي الخضار')]), true)
+    await screen.findByText('اغسلي الخضار')
+    expect(screen.queryByRole('region', { name: 'في الفريزر' })).toBeNull()
+    cleanup()
+    show(withFreezer([task('d', TODAY, 'morning', 'أخرجي اللحم', { kind: 'defrost', done_at: '2026-11-14T07:00:00Z' })]), true)
+    await screen.findByText('إيش أسوي الآن؟')
+    expect(screen.queryByRole('region', { name: 'في الفريزر' })).toBeNull()
+    cleanup()
+    const empty = withFreezer([task('d', TODAY, 'morning', 'أخرجي اللحم', { kind: 'defrost' })])
+    empty.loadFreezer = vi.fn(async () => [])
+    show(empty, true)
+    await screen.findByText('أخرجي اللحم')
+    expect(screen.queryByRole('region', { name: 'في الفريزر' })).toBeNull()
+  })
+
+  it('has no «استعملت» for a reader, and shows the tasks when the freezer cannot be read', async () => {
+    show(withFreezer([task('d', TODAY, 'morning', 'أخرجي اللحم', { kind: 'defrost' })]), false)
+    const card = await screen.findByRole('region', { name: 'في الفريزر' })
+    expect(within(card).queryByRole('button', { name: 'استعملت' })).toBeNull()
+    cleanup()
+    const broken = withFreezer([task('d', TODAY, 'morning', 'أخرجي اللحم', { kind: 'defrost' })])
+    broken.loadFreezer = vi.fn(async () => {
+      throw new Error('x')
+    })
+    show(broken, true)
+    expect(await screen.findByText('أخرجي اللحم')).toBeTruthy()
+  })
+})

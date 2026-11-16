@@ -82,6 +82,28 @@ describe('the shopping list screen', () => {
     expect(screen.getAllByText(/شوربة عدس/).length).toBeGreaterThan(0)
   })
 
+  it('notes beside an item what she has of it in the freezer, and still lists it', async () => {
+    const { api } = server([meal('m1', 'soup', 'شوربة عدس')], { soup: { title: 'شوربة عدس', lines: ['٥٠٠ جرام لحم مفروم', 'ملح'] } })
+    api.loadFreezer = vi.fn(async () => [
+      { id: 'f1', name: 'لحم مفروم مطبوخ', quantity: 3, unit: 'كيس', frozen_on: '2026-11-01', recipe_id: null, note: null },
+      { id: 'f2', name: 'معجنات', quantity: 20, unit: 'قطعة', frozen_on: '2026-11-01', recipe_id: null, note: null },
+    ])
+    show(api)
+    const meat = await screen.findByRole('checkbox', { name: /لحم مفروم/ })
+    expect(meat).toBeTruthy()
+    expect(await screen.findByText('في الفريزر: لحم مفروم مطبوخ ×3 كيس')).toBeTruthy()
+    expect(screen.queryByText(/معجنات/)).toBeNull() // only what matches an item on the list
+  })
+
+  it('lists the week as usual when the freezer cannot be read', async () => {
+    const { api } = server([meal('m1', 'soup', 'شوربة عدس')], recipes)
+    api.loadFreezer = vi.fn(async () => {
+      throw new Error('x')
+    })
+    show(api)
+    expect(await screen.findByRole('checkbox', { name: /بصل/ })).toBeTruthy()
+  })
+
   it('says so when the week has no meals, and names recipes with no ingredients', async () => {
     const empty = server([], {})
     show(empty.api)
