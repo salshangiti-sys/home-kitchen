@@ -4,6 +4,7 @@ import NowPage from './prep/NowPage'
 import PrintPage from './print/PrintPage'
 import ReviewPage from './ingredients/ReviewPage'
 import OverviewPage, { PENDING_EVENT } from './review/OverviewPage'
+import { updateNow, useUpdateAvailable } from './update'
 import ShoppingPage from './shopping/ShoppingPage'
 import DictionaryPage from './shopping/DictionaryPage'
 import { LessonsProvider } from './shopping/LessonsContext'
@@ -113,11 +114,20 @@ export default function App() {
   useNotebookCheck(auth.session != null && editor)
   const backupAlert = useBackupAlert(auth.session != null && editor)
   const waiting = usePendingPages(auth.session != null && editor)
+  const updateAvailable = useUpdateAvailable()
   useFlushWhenOnline(auth.ready && auth.session != null)
 
   return (
     <LessonsProvider signedIn={auth.ready && auth.session != null}>
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-5 print:max-w-none print:px-0 print:py-0">
+      {updateAvailable && !cooking && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-accent bg-surface p-3 text-sm print:hidden">
+          <span>يتوفر إصدار جديد من التطبيق.</span>
+          <button type="button" onClick={() => void updateNow()} className="min-h-10 rounded-xl bg-accent px-4 font-medium text-on-accent">
+            حدّثي الآن
+          </button>
+        </div>
+      )}
       {!cooking && <header className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <a href={href.library}>
           <h1 className="text-2xl font-bold">مطبخ البيت</h1>
