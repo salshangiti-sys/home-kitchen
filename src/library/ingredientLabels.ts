@@ -7,7 +7,12 @@
 import type { IngredientItem } from './types'
 
 const COLON = /[:：]$/
-const MAX_LABEL_WORDS = 4
+const MAX_LABEL_WORDS = 6
+
+// OneNote marks a line break inside one bullet with an invisible object character (U+FFFC), so several
+// ingredients can come as one stored line. They are shown, and bought, as separate lines.
+const INLINE_BREAK = /\uFFFC/
+export const splitInline = (text: string): string[] => text.split(INLINE_BREAK).map((piece) => piece.trim()).filter(Boolean)
 
 export const isLabelLine = (text: string): boolean => {
   const line = text.trim()
@@ -24,8 +29,13 @@ export interface ShownGroup {
 export function splitByLabels(group: { name: string | null; items: IngredientItem[] }): ShownGroup[] {
   const parts: ShownGroup[] = [{ name: group.name, items: [] }]
   for (const item of group.items) {
-    if (isLabelLine(item.text)) parts.push({ name: item.text.trim().replace(COLON, '').trim(), items: [] })
-    else parts[parts.length - 1].items.push(item)
+    const pieces = splitInline(item.text)
+    // a line made of several is shown as several (what was read from the whole line no longer fits a piece)
+    const shown: IngredientItem[] = pieces.length > 1 ? pieces.map((text) => ({ text })) : [item]
+    for (const one of shown) {
+      if (isLabelLine(one.text)) parts.push({ name: one.text.trim().replace(COLON, '').trim(), items: [] })
+      else parts[parts.length - 1].items.push(one)
+    }
   }
   return parts.filter((part) => part.items.length > 0)
 }
