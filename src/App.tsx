@@ -3,7 +3,7 @@ import { canEdit, SignIn, useAuth } from './auth'
 import NowPage from './prep/NowPage'
 import PrintPage from './print/PrintPage'
 import ReviewPage from './ingredients/ReviewPage'
-import OverviewPage from './review/OverviewPage'
+import OverviewPage, { PENDING_EVENT } from './review/OverviewPage'
 import ShoppingPage from './shopping/ShoppingPage'
 import DictionaryPage from './shopping/DictionaryPage'
 import { LessonsProvider } from './shopping/LessonsContext'
@@ -13,7 +13,7 @@ import ImportPage from './library/ImportPage'
 import LibraryPage from './library/LibraryPage'
 import CookMode from './cook/CookMode'
 import { backupState, loadBackupRuns, needsAttention, type BackupState } from './library/backupStatus'
-import { checkIfDue, loadLibrary } from './library/onenote'
+import { checkIfDue, listUnlinked, loadLibrary } from './library/onenote'
 import { InstallHint, OfflineNotice, OutboxNotice } from './offline/Status'
 import { useFlushWhenOnline } from './offline/useOutbox'
 import { Notice } from './ui'
@@ -63,6 +63,25 @@ function useNotebookCheck(enabled: boolean) {
   }, [enabled])
 }
 
+// How many new OneNote pages wait for approval (shown on the «مراجعة» tab). Read now and every few
+// minutes, and updated at once when the review page approves one or checks the notebook.
+function usePendingPages(enabled: boolean): number {
+  const [count, setCount] = useState(0)
+  useEffect(() => {
+    if (!enabled) return
+    const read = () => listUnlinked().then((pages) => setCount(pages.length), () => undefined)
+    const onEvent = (e: Event) => setCount(Number((e as CustomEvent<number>).detail) || 0)
+    read()
+    const timer = window.setInterval(read, 5 * 60 * 1000)
+    window.addEventListener(PENDING_EVENT, onEvent)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener(PENDING_EVENT, onEvent)
+    }
+  }, [enabled])
+  return count
+}
+
 // For the owner: a notice when the nightly backup is failing or has stopped.
 function useBackupAlert(enabled: boolean): BackupState | null {
   const [state, setState] = useState<BackupState | null>(null)
@@ -93,6 +112,7 @@ export default function App() {
   const cooking = route.name === 'cook'
   useNotebookCheck(auth.session != null && editor)
   const backupAlert = useBackupAlert(auth.session != null && editor)
+  const waiting = usePendingPages(auth.session != null && editor)
   useFlushWhenOnline(auth.ready && auth.session != null)
 
   return (
@@ -132,6 +152,7 @@ export default function App() {
                 className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium ${active ? 'border-accent text-ink' : 'border-transparent text-muted'}`}
               >
                 {item.label}
+                {item.to === href.overview && waiting > 0 ? ` (${waiting})` : ''}
               </a>
             )
           })}
