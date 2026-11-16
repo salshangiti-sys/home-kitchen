@@ -203,6 +203,36 @@ describe('the recipe notebook is read and created in, never edited', () => {
     expect(read[2]! < read[0]!).toBe(true) // the third one was not read this time
   })
 
+  it('reads the pages edited in OneNote since the last read before the others', async () => {
+    await connectLibrary(deps, 'nb-real')
+    const ids: string[] = []
+    const pageIds: string[] = []
+    for (const title of ['أ', 'ب', 'ج']) {
+      const created = await onenote.createPage('sec-rice', page(title, '<p>نص</p>'))
+      pageIds.push(created.id)
+      ids.push(await addPage(deps, created.id))
+    }
+    // the last recipe's page is edited after the app read it; the other two were read later than any edit
+    onenote.pages.get(pageIds[2])!.lastModified = Date.UTC(2026, 9, 27)
+    const summary = await checkLibrary(deps, 1)
+    expect(summary.refreshed).toBe(1)
+    const read = await Promise.all(ids.map(async (id) => (await store.link(id))!.lastReadAt))
+    expect(read[2]! > read[0]!).toBe(true) // the edited one was read, not the one read longest ago
+    expect(read[2]! > read[1]!).toBe(true)
+  })
+
+  it('stops starting new reads once the time budget is spent (always reading at least one)', async () => {
+    await connectLibrary(deps, 'nb-real')
+    for (const title of ['أ', 'ب', 'ج', 'د']) await addPage(deps, (await onenote.createPage('sec-rice', page(title, '<p>نص</p>'))).id)
+    onenote.calls = []
+    let now = 0
+    const slow = () => (now += 40_000) // every look at the clock is 40 seconds later
+    const summary = await checkLibrary(deps, 10, 80_000, slow)
+    expect(summary.refreshed).toBeGreaterThanOrEqual(1)
+    expect(summary.refreshed).toBeLessThan(4)
+    expect(onenote.calls.filter((call) => call === 'getPageContent')).toHaveLength(summary.refreshed)
+  })
+
   it('does not offer the page of a trashed recipe for adding again, and does not read or flag it', async () => {
     await connectLibrary(deps, 'nb-real')
     const created = await onenote.createPage('sec-rice', HAND_MADE)
