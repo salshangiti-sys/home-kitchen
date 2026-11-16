@@ -125,12 +125,15 @@ describe('tagging many recipes', () => {
   })
 })
 
+const openFilters = async () => fireEvent.click(await screen.findByRole('button', { name: /تصفية أكثر/ }))
+
 describe('using the cooking history', () => {
   const titles = () => screen.getAllByRole('link').map((a) => a.textContent ?? '').filter((t) => /سلطة|شوربة/.test(t))
 
   it('shows no sorting or filter while nothing was ever cooked', async () => {
     render(<LibraryPage canEdit />)
     await screen.findByText('سلطة خضراء')
+    await openFilters()
     expect(screen.queryByLabelText('الترتيب')).toBeNull()
     expect(screen.queryByRole('button', { name: /لم تُجرَّب بعد/ })).toBeNull()
   })
@@ -159,6 +162,7 @@ describe('using the cooking history', () => {
   it('can show only the recipes never cooked', async () => {
     cookStats = new Map([['salads-002', { count: 4, lastOn: '2026-11-10' }]])
     render(<LibraryPage canEdit />)
+    await openFilters()
     fireEvent.click(await screen.findByRole('button', { name: 'لم تُجرَّب بعد (2)' }))
     expect(screen.queryByText('سلطة فواكه')).toBeNull()
     expect(screen.getByText('سلطة خضراء')).toBeTruthy()
@@ -183,6 +187,7 @@ describe('finding a recipe by its main ingredient or her own tag', () => {
 
   it('offers chicken, meat and fish only when some recipe has them, with how many', async () => {
     render(<LibraryPage canEdit={false} />)
+    await openFilters()
     expect(await screen.findByRole('button', { name: 'فيها دجاج (1)' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'فيها لحم (1)' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'فيها سمك وروبيان (1)' })).toBeTruthy() // from the title: no lines
@@ -190,6 +195,7 @@ describe('finding a recipe by its main ingredient or her own tag', () => {
 
   it('shows only the recipes with the chosen main ingredient, and all again when it is chosen twice', async () => {
     render(<LibraryPage canEdit={false} />)
+    await openFilters()
     fireEvent.click(await screen.findByRole('button', { name: 'فيها دجاج (1)' }))
     expect(screen.getByText('كبسة')).toBeTruthy()
     expect(screen.queryByText('رز بالخضار')).toBeNull()
@@ -200,6 +206,7 @@ describe('finding a recipe by its main ingredient or her own tag', () => {
 
   it('offers her own tags as filters (so a «سريعة» tag finds the quick ones) and combines them with the rest', async () => {
     render(<LibraryPage canEdit={false} />)
+    await openFilters()
     fireEvent.click(await screen.findByRole('button', { name: '#سريعة (2)' }))
     expect(screen.getByText('كبسة')).toBeTruthy()
     expect(screen.getByText('صينية بطاطس')).toBeTruthy()
