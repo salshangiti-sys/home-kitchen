@@ -37,6 +37,9 @@ export function looksOffline(error?: unknown): boolean {
   return /failed to fetch|networkerror|network request failed|load failed|internet connection|offline/i.test(message)
 }
 
+// True when the device itself reports no connection (airplane mode, no signal).
+export const deviceOffline = (): boolean => typeof navigator !== 'undefined' && navigator.onLine === false
+
 // Shown instead of the browser's raw "Failed to fetch".
 export const OFFLINE_MESSAGE = 'يحتاج هذا إلى اتصال بالإنترنت. حاولي مرة أخرى حين يعود الاتصال.'
 export const OFFLINE_NO_COPY = 'لا يوجد اتصال بالإنترنت، ولا توجد نسخة محفوظة على هذا الجهاز بعد. افتحي التطبيق مرة وأنتِ متصلة، ثم يمكنك قراءة الوصفات دون إنترنت.'
@@ -61,6 +64,12 @@ export async function saved<T>(name: string): Promise<T | undefined> {
 // Runs `load`; on success keeps the result for later, on a missing connection returns the last
 // kept result (or `fallback()`, e.g. a copy built from another saved item) if there is one.
 export async function readThrough<T>(name: string, load: () => Promise<T>, fallback?: () => Promise<T | undefined>): Promise<T> {
+  // The device already says it has no connection: do not wait for the network (and for the sign-in
+  // library, which keeps retrying a token refresh for about half a minute); show the saved copy at once.
+  if (deviceOffline()) {
+    const copy = (await saved<T>(name)) ?? (await fallback?.())
+    if (copy !== undefined) return copy
+  }
   try {
     const value = await load()
     void save(name, value)

@@ -153,6 +153,11 @@ export function planMessage(error: unknown): string {
 
 // ---- Pure helpers (tested) ----
 
+// The slot every day shows by default (one main meal a day): «غداء», else the first slot. The other
+// slots (breakfast, dinner, snack, dessert…) show in a day when it has a meal in them, or when she
+// adds one there.
+export const mainSlot = (slots: Slot[]): Slot | undefined => slots.find((s) => s.name.trim() === 'غداء') ?? slots[0]
+
 // The food groups of the recipes planned in a day's slot.
 export function slotUnion(meals: PlannedMeal[], day: string, slot: string, recipeGroups: Record<string, FoodGroup[]>): FoodGroup[] {
   const found = new Set<FoodGroup>()

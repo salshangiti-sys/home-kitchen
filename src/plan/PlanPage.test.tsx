@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RecipeSummary } from '../library/api'
 import { normalizeAr } from '../library/normalize'
@@ -162,6 +162,94 @@ describe('reading the plan', () => {
   })
 })
 
+// Changes waiting on the device, in memory.
+function fakeOutbox() {
+  const ops: Array<{ id: string; key: string; kind: string; args: Record<string, unknown>; at: string }> = []
+  const listeners = new Set<(event: 'queued' | 'flushed' | 'failed') => void>()
+  return {
+    ops,
+    emit: (event: 'queued' | 'flushed' | 'failed') => listeners.forEach((l) => l(event)),
+    enqueue: vi.fn(async (kind: string, key: string, args: Record<string, unknown>) => {
+      ops.push({ id: key, key, kind, args, at: 'now' })
+      listeners.forEach((l) => l('queued'))
+    }),
+    pending: vi.fn(async () => [...ops]),
+    subscribe: (l: (event: 'queued' | 'flushed' | 'failed') => void) => {
+      listeners.add(l)
+      return () => void listeners.delete(l)
+    },
+    discard: vi.fn(async (key: string) => {
+      const i = ops.findIndex((o) => o.key === key)
+      if (i >= 0) ops.splice(i, 1)
+      listeners.forEach((l) => l('queued'))
+    }),
+  }
+}
+
+describe('adding meals with no connection', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('keeps the meal on the device, shows it as not sent yet, and does not call the server', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const { api } = fake()
+    const outbox = fakeOutbox()
+    render(<PlanPage canEdit week={undefined} today={() => TODAY} api={api as unknown as PlanApi} outbox={outbox} />)
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    fireEvent.click(screen.getByRole('tab', { name: 'نص حر' }))
+    fireEvent.change(screen.getByLabelText('الوجبة'), { target: { value: 'بيتزا' } })
+    fireEvent.click(screen.getByRole('button', { name: 'أضيفي إلى الخطة' }))
+    expect(await within(day('السبت')).findByText('بيتزا')).toBeTruthy()
+    expect(within(day('السبت')).getByText('لم تُرسل بعد')).toBeTruthy()
+    expect(screen.getByText(/حُفظت الوجبة على هذا الجهاز/)).toBeTruthy()
+    expect(api.addMeal).not.toHaveBeenCalled()
+    expect(api.generatePrepTasks).not.toHaveBeenCalled()
+    expect(outbox.ops[0].args).toMatchObject({ day: TODAY, slot: 'lunch', recipeId: null, freeText: 'بيتزا', title: 'بيتزا' })
+  })
+
+  it('keeps it too when the connection fails while sending', async () => {
+    const { api } = fake()
+    api.addMeal.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const outbox = fakeOutbox()
+    render(<PlanPage canEdit today={() => TODAY} api={api as unknown as PlanApi} outbox={outbox} />)
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    fireEvent.click(screen.getByRole('tab', { name: 'نص حر' }))
+    fireEvent.change(screen.getByLabelText('الوجبة'), { target: { value: 'مكرونة' } })
+    fireEvent.click(screen.getByRole('button', { name: 'أضيفي إلى الخطة' }))
+    expect(await within(day('السبت')).findByText('لم تُرسل بعد')).toBeTruthy()
+    expect(outbox.ops).toHaveLength(1)
+  })
+
+  it('shows a recipe with its title while it waits, and she can take it back', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const { api } = fake()
+    const outbox = fakeOutbox()
+    render(<PlanPage canEdit today={() => TODAY} api={api as unknown as PlanApi} outbox={outbox} />)
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    fireEvent.click(await screen.findByRole('button', { name: /سلطات/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /سلطة خضراء/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'أضيفي إلى الخطة' }))
+    expect(await within(day('السبت')).findByText('سلطة خضراء')).toBeTruthy()
+    expect(outbox.ops[0].args).toMatchObject({ recipeId: 'salads-001', title: 'سلطة خضراء' })
+    fireEvent.click(within(day('السبت')).getByRole('button', { name: 'إلغاء' }))
+    await waitFor(() => expect(within(day('السبت')).queryByText('سلطة خضراء')).toBeNull())
+    expect(outbox.ops).toHaveLength(0)
+  })
+
+  it('shows the meals that wait from an earlier visit, and reads the week again once they are sent', async () => {
+    const { api, state } = fake()
+    const outbox = fakeOutbox()
+    outbox.ops.push({ id: 'k', key: 'plan-add:1', kind: 'plan_add', args: { day: TODAY, slot: 'lunch', recipeId: null, freeText: 'أرز', title: 'أرز', servings: 2, people: [] }, at: 'x' })
+    render(<PlanPage canEdit today={() => TODAY} api={api as unknown as PlanApi} outbox={outbox} />)
+    expect(await within(await screen.findByRole('region', { name: /السبت/ })).findByText('أرز')).toBeTruthy()
+    // the connection is back: the meal was sent, so the server has it and the outbox is empty
+    state.meals.push(meal('m9', TODAY, 'lunch', 'أرز'))
+    outbox.ops.length = 0
+    await act(async () => outbox.emit('flushed'))
+    await waitFor(() => expect(within(day('السبت')).queryByText('لم تُرسل بعد')).toBeNull())
+    expect(within(day('السبت')).getAllByText('أرز')).toHaveLength(1)
+  })
+})
+
 describe('planning meals', () => {
   it('prepares the default slots the first time an editor opens it', async () => {
     const { api } = fake({ slots: [] })
@@ -186,13 +274,43 @@ describe('planning meals', () => {
   it('adds free text', async () => {
     const { api } = fake()
     show(api, true)
-    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى عشاء' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'إضافة عشاء' }))[0])
     fireEvent.click(screen.getByRole('tab', { name: 'نص حر' }))
     expect((screen.getByRole('button', { name: 'أضيفي إلى الخطة' }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.change(screen.getByLabelText('الوجبة'), { target: { value: 'بيتزا' } })
     fireEvent.click(screen.getByRole('button', { name: 'أضيفي إلى الخطة' }))
     await waitFor(() => expect(api.addMeal).toHaveBeenCalledWith({ day: TODAY, slot: 'dinner', recipeId: null, freeText: 'بيتزا', servings: null, people: [] }))
     expect(await within(day('السبت')).findByText('بيتزا')).toBeTruthy()
+  })
+
+  it('shows one main meal (غداء) a day, and the others only when they have a meal or she opens them', async () => {
+    const { api } = fake({ meals: [meal('a', addDays(TODAY, 1), 'dinner', 'شوربة')] })
+    show(api, true)
+    await screen.findByText('شوربة')
+    expect(within(day('السبت')).getByText('غداء')).toBeTruthy()
+    expect(within(day('السبت')).queryByText('عشاء')).toBeNull()
+    expect(within(day('الأحد')).getByText('عشاء')).toBeTruthy() // a day with a dinner shows it
+    fireEvent.click(within(day('السبت')).getByRole('button', { name: 'إضافة عشاء' }))
+    expect(within(day('السبت')).getByText('عشاء')).toBeTruthy()
+    expect(within(day('السبت')).queryByRole('button', { name: 'إضافة عشاء' })).toBeNull() // it is open now
+  })
+
+  it('lists the sections first, then the recipes of the one she picks (a search still looks everywhere)', async () => {
+    const { api } = fake()
+    api.loadRecipes.mockResolvedValue([recipe('a', 'شوربة عدس', 'شربة'), recipe('b', 'فتوش', 'فتات وسلطات'), recipe('c', 'تبولة', 'فتات وسلطات'), recipe('d', 'فطائر', 'فطور')])
+    show(api, true)
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ أضيفي إلى غداء' }))[0])
+    const sections = await screen.findByRole('group', { name: 'أقسام الوصفات' })
+    const names = within(sections).getAllByRole('button').map((b) => b.textContent)
+    expect(names).toEqual(['فطور1', 'فتات وسلطات2', 'شربة1']) // her order, with the count
+    expect(screen.queryByRole('button', { name: /فتوش/ })).toBeNull() // no recipes until a section is picked
+    fireEvent.click(within(sections).getByRole('button', { name: /فتات وسلطات/ }))
+    expect(screen.getByRole('button', { name: /فتوش/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /تبولة/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /شوربة عدس/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '← الأقسام' }))
+    fireEvent.change(screen.getByLabelText('بحث عن وصفة'), { target: { value: 'شوربه' } })
+    expect(await screen.findByRole('button', { name: /شوربة عدس/ })).toBeTruthy()
   })
 
   it('says when the library has no recipes yet', async () => {

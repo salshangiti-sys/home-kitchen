@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '../ui'
 import { matchesQuery, normalizeAr } from '../library/normalize'
+import { sectionsOf } from '../library/sections'
 import type { RecipeSummary } from '../library/api'
 import type { NewMeal, Person } from './api'
 
@@ -13,13 +14,14 @@ interface Props {
   people: Person[]
   loadRecipes: () => Promise<RecipeSummary[]>
   busy: boolean
-  onAdd: (meal: NewMeal) => void
+  onAdd: (meal: NewMeal, title: string) => void // the title is for showing the meal while it waits to be sent
   onCancel: () => void
 }
 
 export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, onCancel }: Props) {
   const [mode, setMode] = useState<'recipe' | 'text'>('recipe')
   const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null)
+  const [section, setSection] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<RecipeSummary | null>(null)
   const [text, setText] = useState('')
@@ -30,9 +32,13 @@ export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, o
     loadRecipes().then(setRecipes, () => setRecipes([]))
   }, [loadRecipes])
 
+  const sections = useMemo(() => sectionsOf(recipes ?? []), [recipes])
+  // Sections first: nothing is listed until she picks a section or types a search. A search looks in
+  // the picked section, or in all of them.
+  const searching = query.trim() !== ''
   const found = useMemo(
-    () => (recipes ?? []).filter((r) => matchesQuery(r.search_norm || normalizeAr(r.title), query)).slice(0, 8),
-    [recipes, query],
+    () => (recipes ?? []).filter((r) => (section === null || r.section === section) && matchesQuery(r.search_norm || normalizeAr(r.title), query)),
+    [recipes, query, section],
   )
   const ready = mode === 'recipe' ? picked !== null : text.trim() !== ''
   const toggle = (id: string) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]))
@@ -43,14 +49,17 @@ export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, o
       onSubmit={(e) => {
         e.preventDefault()
         if (!ready) return
-        onAdd({
-          day,
-          slot,
-          recipeId: mode === 'recipe' ? picked!.id : null,
-          freeText: mode === 'text' ? text.trim() : null,
-          servings: servings.trim() === '' ? null : Number(servings),
-          people: chosen,
-        })
+        onAdd(
+          {
+            day,
+            slot,
+            recipeId: mode === 'recipe' ? picked!.id : null,
+            freeText: mode === 'text' ? text.trim() : null,
+            servings: servings.trim() === '' ? null : Number(servings),
+            people: chosen,
+          },
+          mode === 'recipe' ? picked!.title : text.trim(),
+        )
       }}
     >
       <div role="tablist" className="flex gap-1 rounded-xl border border-line bg-surface p-1">
@@ -73,17 +82,35 @@ export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, o
               <input type="search" dir="auto" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحثي عن وصفة…" aria-label="بحث عن وصفة" className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base" />
               {recipes === null && <p className="text-sm text-muted">جارٍ التحميل…</p>}
               {recipes !== null && recipes.length === 0 && <p className="text-sm text-muted">لا وصفات في المكتبة بعد. يمكنك كتابة نص حر.</p>}
-              {recipes !== null && recipes.length > 0 && found.length === 0 && <p className="text-sm text-muted">لا نتائج.</p>}
-              <ul className="flex flex-col gap-1">
-                {found.map((r) => (
-                  <li key={r.id}>
-                    <button type="button" onClick={() => setPicked(r)} className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-line px-3 text-start">
-                      <span dir="auto" className="truncate">{r.title}</span>
-                      <span dir="auto" className="shrink-0 text-xs text-muted">{r.section}</span>
+              {section !== null && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button kind="plain" onClick={() => setSection(null)}>← الأقسام</Button>
+                  <span dir="auto" className="font-medium">{section}</span>
+                </div>
+              )}
+              {section === null && !searching && recipes !== null && recipes.length > 0 && (
+                <div role="group" aria-label="أقسام الوصفات" className="grid grid-cols-2 gap-2">
+                  {sections.map(([name, count]) => (
+                    <button key={name} type="button" onClick={() => setSection(name)} className="flex min-h-12 items-center justify-between gap-2 rounded-xl border border-line px-3 text-start">
+                      <span dir="auto" className="text-sm font-medium">{name}</span>
+                      <span className="shrink-0 text-xs text-muted">{count}</span>
                     </button>
-                  </li>
-                ))}
-              </ul>
+                  ))}
+                </div>
+              )}
+              {(section !== null || searching) && recipes !== null && recipes.length > 0 && found.length === 0 && <p className="text-sm text-muted">لا نتائج.</p>}
+              {(section !== null || searching) && (
+                <ul className="flex max-h-80 flex-col gap-1 overflow-y-auto">
+                  {found.map((r) => (
+                    <li key={r.id}>
+                      <button type="button" onClick={() => setPicked(r)} className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-line px-3 text-start">
+                        <span dir="auto" className="truncate">{r.title}</span>
+                        {section === null && <span dir="auto" className="shrink-0 text-xs text-muted">{r.section}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </>
           )}
         </div>

@@ -68,6 +68,16 @@ describe('ticking a task with no connection', () => {
     expect(screen.getByText('أُنجز اليوم (1)')).toBeTruthy()
   })
 
+  it('when the device says it has no connection, keeps the tick at once without calling the server', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const { api } = server([task('a', 'انقعي الأرز')])
+    show(api)
+    fireEvent.click(await screen.findByRole('checkbox', { name: /انقعي الأرز/ }))
+    expect(await screen.findByText('لم تُرسل بعد')).toBeTruthy()
+    expect(api.setDone).not.toHaveBeenCalled()
+    expect((await pending()).map((op) => op.args)).toEqual([{ id: 'a', done: true }])
+  })
+
   it('keeps only the last tick of a task: ticking and unticking offline sends one change', async () => {
     const { api } = server([task('a', 'انقعي الأرز')])
     show(api)

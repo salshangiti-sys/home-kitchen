@@ -7,6 +7,7 @@ import { href } from '../router'
 import { Button, Notice } from '../ui'
 import { addMeal, loadWeek, planMessage, type Slot } from './api'
 import { dayLabel, todayIso, weekdayName } from './dates'
+import { addMealOrQueue, realOutbox, type PlanOutbox } from './offline'
 import { generateTasks } from '../prep/api'
 
 export interface AddToPlanApi {
@@ -19,11 +20,13 @@ const real: AddToPlanApi = { loadWeek, addMeal, generateTasks }
 
 interface Props {
   recipeId: string
+  title?: string // the recipe's title, to show the meal if it has to wait for a connection
   today?: () => string
   api?: AddToPlanApi
+  outbox?: PlanOutbox
 }
 
-export default function AddToPlan({ recipeId, today = todayIso, api = real }: Props) {
+export default function AddToPlan({ recipeId, title = 'وصفة', today = todayIso, api = real, outbox = realOutbox }: Props) {
   const [open, setOpen] = useState(false)
   const [slots, setSlots] = useState<Slot[] | null>(null)
   const [day, setDay] = useState(today())
@@ -31,7 +34,7 @@ export default function AddToPlan({ recipeId, today = todayIso, api = real }: Pr
   const [servings, setServings] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [added, setAdded] = useState<{ day: string; slot: string; week: string } | null>(null)
+  const [added, setAdded] = useState<{ day: string; slot: string; week: string; waiting?: boolean } | null>(null)
 
   useEffect(() => {
     if (!open || slots) return
@@ -51,10 +54,10 @@ export default function AddToPlan({ recipeId, today = todayIso, api = real }: Pr
     setBusy(true)
     setError(null)
     try {
-      await api.addMeal({ day, slot, recipeId, freeText: null, servings: servingsNumber, people: [] })
-      await api.generateTasks(day).catch(() => undefined) // tasks follow the plan; a failure here does not undo the meal
+      const how = await addMealOrQueue({ day, slot, recipeId, freeText: null, servings: servingsNumber, people: [] }, title, (m) => api.addMeal(m), outbox)
+      if (how === 'sent') await api.generateTasks(day).catch(() => undefined) // tasks follow the plan; a failure here does not undo the meal
       const week = await api.loadWeek(day).catch(() => null)
-      setAdded({ day, slot: slots?.find((s) => s.id === slot)?.name ?? '', week: week?.weekStart ?? day })
+      setAdded({ day, slot: slots?.find((s) => s.id === slot)?.name ?? '', week: week?.weekStart ?? day, waiting: how === 'queued' })
       setOpen(false)
     } catch (e) {
       setError(planMessage(e))
@@ -67,7 +70,7 @@ export default function AddToPlan({ recipeId, today = todayIso, api = real }: Pr
     <section aria-label="إضافة إلى الخطة" className="flex flex-col gap-2">
       {added && (
         <Notice>
-          أُضيفت إلى الخطة: {weekdayName(added.day)} {dayLabel(added.day)}{added.slot ? ` (${added.slot})` : ''}. <a href={href.plan(added.week)} className="underline">افتحي الخطة</a>
+          {added.waiting ? 'لا يوجد اتصال: حُفظت على هذا الجهاز وتُضاف إلى الخطة' : 'أُضيفت إلى الخطة'}: {weekdayName(added.day)} {dayLabel(added.day)}{added.slot ? ` (${added.slot})` : ''}{added.waiting ? ' حين يعود الاتصال' : ''}. <a href={href.plan(added.week)} className="underline">افتحي الخطة</a>
         </Notice>
       )}
       {error && <Notice tone="error">{error}</Notice>}

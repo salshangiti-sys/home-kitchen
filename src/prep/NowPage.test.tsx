@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import NowPage, { type NowApi } from './NowPage'
-import type { MealInfo, NowData, Task } from './api'
+import type { DayMeal, MealInfo, NowData, Task } from './api'
 
 const TODAY = '2026-11-14'
 
@@ -20,9 +20,12 @@ const task = (id: string, day: string, timing: Task['timing'], body: string, ext
   ...extra,
 })
 
-function fake(tasks: Task[], meals: Record<string, MealInfo> = {}) {
+const dayMeal = (id: string, day: string, slot: string, title: string, extra: Partial<DayMeal> = {}): DayMeal => ({ id, day, slot, recipe_id: null, title, servings: null, status: 'planned', ...extra })
+
+function fake(tasks: Task[], meals: Record<string, MealInfo> = {}, planned: DayMeal[] = []) {
   const state = { tasks: [...tasks] }
   const api = {
+    loadMeals: vi.fn(async () => planned),
     loadNow: vi.fn(async (): Promise<NowData> => ({ tasks: state.tasks.filter((t) => !('dismissed' in t)), meals })),
     generateTasks: vi.fn(async () => ({ added: 0, updated: 0, removed: 0 })),
     setDone: vi.fn(async (id: string, done: boolean) => {
@@ -42,6 +45,39 @@ function fake(tasks: Task[], meals: Record<string, MealInfo> = {}) {
 const show = (api: ReturnType<typeof fake>, canEdit: boolean) => render(<NowPage canEdit={canEdit} today={() => TODAY} api={api as unknown as NowApi} />)
 
 afterEach(cleanup)
+
+describe('the meals of today and tomorrow', () => {
+  it('lists today\'s meals with their slot and a link to the recipe, and tomorrow\'s apart', async () => {
+    const api = fake([], {}, [
+      dayMeal('m1', TODAY, 'عشاء', 'إيدام دجاج بالكريمة', { recipe_id: 'chk-1', servings: 4 }),
+      dayMeal('m2', TODAY, 'غداء', 'أرز', { status: 'cooked' }),
+      dayMeal('m3', '2026-11-15', 'غداء', 'سمك مشوي', { recipe_id: 'fish-1' }),
+    ])
+    show(api, true)
+    const meals = within(await screen.findByRole('region', { name: 'وجبات اليوم' }))
+    expect(meals.getByRole('link', { name: 'إيدام دجاج بالكريمة' }).getAttribute('href')).toBe('#/r/chk-1')
+    expect(meals.getByText('عشاء')).toBeTruthy()
+    expect(meals.getByText('4 حصص')).toBeTruthy()
+    expect(meals.getByText('تم طبخها')).toBeTruthy()
+    expect(meals.queryByText('سمك مشوي')).toBeNull()
+    expect(screen.getByText('وجبات الغد (1)')).toBeTruthy()
+    // with no prep tasks it says where they come from
+    expect(screen.getByText(/تُضاف مهام التجهيز/)).toBeTruthy()
+  })
+
+  it('shows no meals section when nothing is planned', async () => {
+    show(fake([]), true)
+    await screen.findByText('إيش أسوي الآن؟')
+    expect(screen.queryByRole('region', { name: 'وجبات اليوم' })).toBeNull()
+  })
+
+  it('still shows the tasks when the meals cannot be read', async () => {
+    const api = fake([task('a', TODAY, 'morning', 'اغسلي الخضار')])
+    api.loadMeals.mockRejectedValue(new Error('x'))
+    show(api, false)
+    expect(await screen.findByText('اغسلي الخضار')).toBeTruthy()
+  })
+})
 
 describe('what to do now', () => {
   it('shows what is late, then today in order, with the meal each task is for', async () => {

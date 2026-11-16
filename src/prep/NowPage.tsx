@@ -3,9 +3,10 @@
 // household can tick a task; owners and editors can also change, dismiss, or add one.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { href } from '../router'
 import { Badge, Button, Notice } from '../ui'
 import { enqueue, pending, subscribe, type Op } from '../offline/outbox'
-import { looksOffline } from '../offline/readThrough'
+import { deviceOffline, looksOffline } from '../offline/readThrough'
 import { dayLabel, todayIso, weekdayName } from '../plan/dates'
 import {
   KIND_LABELS,
@@ -15,6 +16,7 @@ import {
   dismissTask,
   generateTasks,
   groupNow,
+  loadMealsOn,
   loadNow,
   overlayTicks,
   prepMessage,
@@ -23,6 +25,7 @@ import {
   tickKey,
   TICK_KIND,
   updateTask,
+  type DayMeal,
   type NowData,
   type PrepTiming,
   type Task,
@@ -31,6 +34,7 @@ import {
 
 export interface NowApi {
   loadNow: typeof loadNow
+  loadMeals?: typeof loadMealsOn // today's and tomorrow's meals (best effort)
   generateTasks: typeof generateTasks
   setDone: typeof setDone
   addTask: typeof addTask
@@ -38,7 +42,7 @@ export interface NowApi {
   dismissTask: typeof dismissTask
 }
 
-const real: NowApi = { loadNow, generateTasks, setDone, addTask, updateTask, dismissTask }
+const real: NowApi = { loadNow, loadMeals: loadMealsOn, generateTasks, setDone, addTask, updateTask, dismissTask }
 
 // Where changes made with no connection wait (the app's own outbox unless a test brings another).
 export interface Outbox {
@@ -58,6 +62,7 @@ interface Props {
 export default function NowPage({ canEdit, today = todayIso, api = real, outbox = realOutbox }: Props) {
   const now = today()
   const [data, setData] = useState<NowData | null>(null)
+  const [meals, setMeals] = useState<DayMeal[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<string | 'new' | null>(null)
@@ -78,11 +83,12 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
   const load = useCallback(async () => {
     try {
       // Owners and editors bring the tasks up to date with the plan when they open the page.
-      if (canEdit && !synced.current) {
+      if (canEdit && !synced.current && !deviceOffline()) {
         synced.current = true
         await api.generateTasks(now).catch(() => undefined)
       }
       await show(await api.loadNow(now))
+      setMeals((await api.loadMeals?.(now).catch(() => undefined)) ?? [])
     } catch (e) {
       setData((current) => current)
       setError(prepMessage(e))
@@ -117,10 +123,11 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
     setBusy(true)
     setError(null)
     try {
+      if (deviceOffline()) throw new Error('offline') // no connection: keep it on the device at once
       await api.setDone(task.id, done)
       await show(await api.loadNow(now))
     } catch (e) {
-      if (looksOffline(e)) {
+      if (looksOffline(e) || deviceOffline()) {
         await outbox.enqueue(TICK_KIND, tickKey(task.id), { id: task.id, done })
         setWaiting((ids) => new Set(ids).add(task.id))
         setData((current) => current && { ...current, tasks: current.tasks.map((t) => (t.id === task.id ? { ...t, done_at: done ? new Date().toISOString() : null } : t)) })
@@ -136,6 +143,8 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
 
   const groups = groupNow(data.tasks, now)
   const nothing = groups.overdue.length + groups.today.length + groups.doneToday.length === 0
+  const todayMeals = meals.filter((m) => m.day === now)
+  const tomorrowMeals = meals.filter((m) => m.day !== now)
 
   const row = (task: Task) => (
     <TaskRow
@@ -162,6 +171,13 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
       <p className="text-sm text-muted">{weekdayName(now)} {dayLabel(now)}</p>
       {error && <Notice tone="error">{error}</Notice>}
 
+      {todayMeals.length > 0 && (
+        <section aria-label="وجبات اليوم" className="flex flex-col gap-2">
+          <h3 className="text-lg font-semibold">وجبات اليوم</h3>
+          <ul className="flex flex-col gap-2">{todayMeals.map((meal) => <MealItem key={meal.id} meal={meal} />)}</ul>
+        </section>
+      )}
+
       {groups.overdue.length > 0 && (
         <section aria-label="متأخرة" className="flex flex-col gap-2">
           <h3 className="text-lg font-semibold text-red-700 dark:text-red-400">متأخرة</h3>
@@ -172,7 +188,15 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
       <section aria-label="اليوم" className="flex flex-col gap-2">
         <h3 className="text-lg font-semibold">اليوم</h3>
         {groups.today.length > 0 ? <ul className="flex flex-col gap-2">{groups.today.map(row)}</ul> : <p className="text-sm text-muted">{nothing ? 'لا مهام تجهيز اليوم.' : 'أنجزتِ كل مهام اليوم.'}</p>}
+        {nothing && todayMeals.some((m) => m.recipe_id) && <p className="text-sm text-muted">تُضاف مهام التجهيز (إذابة، تتبيل…) من «التجهيز» في صفحة كل وصفة، فتظهر هنا حين تكون الوصفة في الخطة.</p>}
       </section>
+
+      {tomorrowMeals.length > 0 && (
+        <details className="rounded-2xl border border-line p-3">
+          <summary className="cursor-pointer font-medium">وجبات الغد ({tomorrowMeals.length})</summary>
+          <ul className="mt-2 flex flex-col gap-2">{tomorrowMeals.map((meal) => <MealItem key={meal.id} meal={meal} />)}</ul>
+        </details>
+      )}
 
       {groups.tomorrow.length > 0 && (
         <details className="rounded-2xl border border-line p-3">
@@ -193,6 +217,22 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
         <TaskForm initial={{ day: now, timing: 'before_cooking', atTime: null, body: '' }} busy={busy} submitLabel="أضيفي المهمة" onSubmit={(input) => void run(() => api.addTask(input))} onCancel={() => setEditing(null)} />
       )}
     </div>
+  )
+}
+
+// A meal planned for today or tomorrow: its slot, its title (a link to the recipe) and servings.
+function MealItem({ meal }: { meal: DayMeal }) {
+  return (
+    <li className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface p-3">
+      {meal.slot && <Badge tone="accent">{meal.slot}</Badge>}
+      {meal.recipe_id ? (
+        <a href={href.recipe(meal.recipe_id)} dir="auto" className="font-medium text-accent underline">{meal.title}</a>
+      ) : (
+        <span dir="auto" className="font-medium">{meal.title}</span>
+      )}
+      {meal.servings !== null && <Badge>{meal.servings} {meal.servings === 1 ? 'حصة' : 'حصص'}</Badge>}
+      {meal.status === 'cooked' && <Badge>تم طبخها</Badge>}
+    </li>
   )
 }
 

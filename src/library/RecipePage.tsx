@@ -216,7 +216,7 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         </p>
       )}
 
-      {canEdit && !inTrash && <AddToPlan recipeId={id} />}
+      {canEdit && !inTrash && <AddToPlan recipeId={id} title={doc.title} />}
 
       <FoodGroups recipeId={id} canEdit={canEdit && !inTrash} />
 
