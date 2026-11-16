@@ -61,6 +61,11 @@ describe('one row per recipe', () => {
     expect(byId('a').groups).toEqual(['protein', 'dairy'])
   })
 
+  it('a draft written by the app waits for approval too', () => {
+    const draft = buildOverview({ ...data, flags: [{ id: 'f7', recipe_id: 'a', flag: 'draft_by_app', status: 'open' }] })
+    expect(draft.find((r) => r.id === 'a')?.awaiting).toEqual(['f7'])
+  })
+
   it('says what each recipe is still missing', () => {
     expect(byId('a').problems).toEqual(['cut_missing'])
     expect(byId('a').uncut).toEqual(['جزر', 'فلفل رومي'])

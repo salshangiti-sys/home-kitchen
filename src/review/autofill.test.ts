@@ -5,9 +5,14 @@ const input = (title: string, lines: string[], text = '') => ({ title, lines, te
 
 describe('tags from the title and the lines', () => {
   it('chicken, shredded, minced and big meat', () => {
-    expect(tagsFor(input('رز بالفرن (دجاج مفتفت)', ['رز', 'دجاج']))).toEqual(['دجاج', 'مفتفت'])
+    expect(tagsFor(input('رز بالفرن (دجاج مفتفت)', ['رز', 'دجاج']))).toEqual(['دجاج', 'دجاج مفتفت'])
     expect(tagsFor(input('مكرونة بشاميل', ['لحم مفروم وبصل', 'مكرونة']))).toEqual(['لحم مفروم'])
     expect(tagsFor(input('رز عربي', ['كيلوين و نص لحم مقطع اوصال كبار']))).toEqual(['لحم كبير'])
+  })
+  it('chicken breasts are a tag of their own', () => {
+    expect(tagsFor(input('سيزر راب', ['٢ صدر دجاج', 'خس']))).toEqual(['دجاج', 'صدور دجاج'])
+    expect(tagsFor(input('شاورما', ['١ كجم صدور دجاج شرائح']))).toEqual(['دجاج', 'صدور دجاج'])
+    expect(tagsFor(input('إيدام', ['دجاج مقطع', 'صدر الخروف']))).toEqual(['دجاج'])
   })
   it('plain meat when it does not say which kind, kofta apart', () => {
     expect(tagsFor(input('كبسة حمراء', ['بصل', 'لحم', 'رز']))).toEqual(['لحم'])

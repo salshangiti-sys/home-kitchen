@@ -27,6 +27,8 @@ const without = (text: string) => text.toLowerCase().replace(NOT_THE_THING, ' ')
 
 const CHICKEN = new RegExp(`(دجاج|فراخ|(^|[^ء-ي])صدر|صدور|فيليه|تشيكن|افخاذ|أفخاذ|وراك)`)
 const SHREDDED = /(مفتفت|متفتف|مفتت)/
+// «صدر الخروف» is lamb, not a chicken breast.
+const BREASTS = new RegExp(`(^|[^ء-ي])(صدر|صدور)(?![ء-ي])(?! (ال)?(خروف|غنم|ضان|لحم|بقر))`)
 const MINCED = /(لحم(ة|ه)? ?مفروم|مفروم(ة|ه)? ?مفرزن)/
 const BIG_MEAT = /(لحم كبير|لحم مقطع|اوصال|أوصال|حاشي|ستيك|لحم عجل|لحم غنم|لحم بقري)/
 const KOFTA = /(كفتة|كفته)/
@@ -45,8 +47,11 @@ export function tagsFor(input: AutofillInput): string[] {
   const big = has(t, BIG_MEAT)
   const kofta = has(t, KOFTA)
   const tags: string[] = []
-  if (has(t, CHICKEN)) tags.push('دجاج')
-  if (has(t, SHREDDED)) tags.push('مفتفت')
+  const chicken = has(t, CHICKEN)
+  if (chicken) tags.push('دجاج')
+  // Chicken breasts and shredded chicken are tags of their own, besides «دجاج».
+  if (chicken && has(t, BREASTS)) tags.push('صدور دجاج')
+  if (chicken && has(t, SHREDDED)) tags.push('دجاج مفتفت')
   if (minced) tags.push('لحم مفروم')
   if (big) tags.push('لحم كبير')
   if (kofta) tags.push('كفتة')

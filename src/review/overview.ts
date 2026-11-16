@@ -47,8 +47,9 @@ export interface OverviewData {
 const PAGE = 1000 // the most rows one request returns
 
 // A recipe with one of these flags still open is waiting for her to approve it: added from a OneNote
-// page, or given a starting set of tags, prep tasks and food groups by the app.
-export const AWAITING_FLAGS = ['added_from_onenote', 'auto_filled'] as const
+// page, given a starting set of tags, prep tasks and food groups by the app, or written as a draft
+// (quantities and steps are the app's estimate) such as the starter «مفرزنات» recipes.
+export const AWAITING_FLAGS = ['added_from_onenote', 'auto_filled', 'draft_by_app'] as const
 
 type Page = PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
 
