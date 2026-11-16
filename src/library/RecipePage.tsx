@@ -39,7 +39,8 @@ const FLAG_LABELS: Record<string, string> = {
   method_inside_ingredients: 'الطريقة مكتوبة داخل المقادير',
   quantities_missing: 'كميات غير مذكورة',
   title_mismatch: 'العنوان لا يطابق المحتوى',
-  added_from_onenote: 'أُضيفت من صفحة في OneNote',
+  added_from_onenote: 'أُضيفت من صفحة في OneNote (تنتظر اعتمادكِ في «مراجعة»)',
+  auto_filled: 'ملأ التطبيق وسومها وتجهيزاتها وعناصرها الغذائية تلقائيًا (تنتظر اعتمادكِ في «مراجعة»)',
 }
 
 function describeFlag(flag: string): string {

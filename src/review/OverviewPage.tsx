@@ -6,6 +6,9 @@ import { href } from '../router'
 import { Badge, Button, Card, LinkButton, Notice } from '../ui'
 import { addPageAsRecipe, checkNotebook, listUnlinked, loadLibrary, timeAgo, type CheckSummary, type UnlinkedPage } from '../library/onenote'
 import { sectionsOf } from '../library/sections'
+import { setFlagStatus } from '../library/api'
+import { autofillRecipe } from './apply'
+import type { Autofill } from './autofill'
 import { FOOD_GROUP_LABELS } from '../nutrition/api'
 import { PROBLEM_LABELS, buildOverview, filterRows, loadOverview, problemCounts, type OverviewData, type OverviewRow, type Problem } from './overview'
 
@@ -17,7 +20,8 @@ export interface Pending {
 export interface OverviewApi {
   loadOverview: typeof loadOverview
   loadPending: () => Promise<Pending>
-  approve: (pageId: string) => Promise<{ recipeId: string }>
+  approve: (pageId: string) => Promise<{ recipeId: string; filled: Autofill | null }> // makes the recipe, and fills in a starting set
+  approveRecipes: (flagIds: string[]) => Promise<void> // she has reviewed these recipes
   checkNow: () => Promise<CheckSummary>
 }
 const real: OverviewApi = {
@@ -26,7 +30,15 @@ const real: OverviewApi = {
     const [pages, library] = await Promise.all([listUnlinked(), loadLibrary()])
     return { pages, checkedAt: library?.last_checked_at ?? null }
   },
-  approve: addPageAsRecipe,
+  approve: async (pageId) => {
+    const { recipeId } = await addPageAsRecipe(pageId)
+    // the starting tags, tasks and groups are a help: the recipe exists even if filling them in fails
+    const filled = await autofillRecipe(recipeId).catch(() => null)
+    return { recipeId, filled }
+  },
+  approveRecipes: async (flagIds) => {
+    for (const id of flagIds) await setFlagStatus(id, 'reviewed')
+  },
   checkNow: checkNotebook,
 }
 
@@ -36,7 +48,7 @@ const announce = (count: number) => window.dispatchEvent(new CustomEvent(PENDING
 
 const chip = (active: boolean) => `min-h-9 shrink-0 rounded-full border px-3 text-sm ${active ? 'border-accent bg-accent text-on-accent' : 'border-line text-ink'}`
 
-function Row({ row, open }: { row: OverviewRow; open: boolean }) {
+function Row({ row, open, busy, onApprove }: { row: OverviewRow; open: boolean; busy: boolean; onApprove: (flagIds: string[]) => void }) {
   return (
     <details open={open} className="rounded-2xl border border-line bg-surface p-3">
       <summary className="flex cursor-pointer flex-col gap-1.5">
@@ -83,7 +95,12 @@ function Row({ row, open }: { row: OverviewRow; open: boolean }) {
           <h4 className="font-semibold">العناصر الغذائية</h4>
           <p>{row.groups.length ? row.groups.map((g) => FOOD_GROUP_LABELS[g]).join('، ') : <span className="text-muted">لم تُحدَّد.</span>}</p>
         </section>
-        <div>
+        <div className="flex flex-wrap gap-2">
+          {row.awaiting.length > 0 && (
+            <Button disabled={busy} onClick={() => onApprove(row.awaiting)}>
+              اعتمدي
+            </Button>
+          )}
           <LinkButton href={href.recipe(row.id)}>افتحي الوصفة للتعديل</LinkButton>
         </div>
       </div>
@@ -102,6 +119,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
   const [problem, setProblem] = useState<Problem | null>(null)
   const [tag, setTag] = useState<string | null>(null)
   const [openAll, setOpenAll] = useState(false)
+  const [confirmingAll, setConfirmingAll] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -141,6 +159,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
     return [...map].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ar'))
   }, [rows])
   const shown = useMemo(() => filterRows(rows, { query, section, problem, tag }), [rows, query, section, problem, tag])
+  const waitingShown = useMemo(() => shown.filter((r) => r.awaiting.length > 0), [shown])
 
   if (!data) return error ? <Notice tone="error">{error}</Notice> : <p className="text-muted">جارٍ التحميل…</p>
 
@@ -181,8 +200,13 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
                     disabled={busy}
                     onClick={() =>
                       act(async () => {
-                        const { recipeId } = await api.approve(page.page_id)
-                        return { text: `اعتُمدت «${page.title || 'بدون عنوان'}» وانتقلت إلى الوصفات.`, recipeId }
+                        const { recipeId, filled } = await api.approve(page.page_id)
+                        const name = `«${page.title || 'بدون عنوان'}»`
+                        const start = filled && (filled.tags.length || filled.groups.length || filled.prep.length)
+                        return {
+                          text: `اعتُمدت ${name} وانتقلت إلى الوصفات.${start ? ' ملأتُ لها وسومًا وتجهيزات وعناصر غذائية مبدئية، وهي تنتظر اعتمادكِ أو تعديلكِ في القائمة أدناه.' : ' لم أجد في صفحتها ما أبني عليه وسومًا أو تجهيزات.'}`,
+                          recipeId,
+                        }
                       })
                     }
                   >
@@ -263,12 +287,50 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
         </button>
       </div>
 
+      {problem === 'awaiting' && waitingShown.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface p-3 text-sm">
+          {confirmingAll ? (
+            <>
+              <span>تعتمدين {waitingShown.length} وصفة كما هي. تأكدي أنكِ راجعتِها.</span>
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  setConfirmingAll(false)
+                  void act(async () => {
+                    await api.approveRecipes(waitingShown.flatMap((r) => r.awaiting))
+                    return { text: `اعتُمدت ${waitingShown.length} وصفة.` }
+                  })
+                }}
+              >
+                نعم، اعتمدي الكل
+              </Button>
+              <Button kind="plain" onClick={() => setConfirmingAll(false)}>إلغاء</Button>
+            </>
+          ) : (
+            <Button kind="plain" disabled={busy} onClick={() => setConfirmingAll(true)}>
+              اعتمدي كل الظاهرة ({waitingShown.length})
+            </Button>
+          )}
+        </div>
+      )}
+
       {shown.length === 0 ? (
         <Notice>لا وصفات بهذه الاختيارات.</Notice>
       ) : (
         <div className="flex flex-col gap-2">
           {shown.map((row) => (
-            <Row key={`${row.id}:${openAll}`} row={row} open={openAll} />
+            <Row
+              key={`${row.id}:${openAll}`}
+              row={row}
+              open={openAll}
+              busy={busy}
+              onApprove={(flagIds) =>
+                void act(async () => {
+                  await api.approveRecipes(flagIds)
+                  return { text: `اعتُمدت «${row.title}».` }
+                })
+              }
+            />
           ))}
         </div>
       )}

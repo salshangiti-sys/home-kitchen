@@ -26,8 +26,15 @@ export interface OverviewTemplate {
   body: string
   position: number
 }
+export interface OverviewFlag {
+  id: string
+  recipe_id: string
+  flag: string
+  status: 'open' | 'reviewed'
+}
 export interface OverviewData {
   recipes: OverviewRecipe[]
+  flags: OverviewFlag[]
   lines: Line[]
   suggestions: Line[] // the confirmed ones only
   templates: OverviewTemplate[]
@@ -35,6 +42,10 @@ export interface OverviewData {
 }
 
 const PAGE = 1000 // the most rows one request returns
+
+// A recipe with one of these flags still open is waiting for her to approve it: added from a OneNote
+// page, or given a starting set of tags, prep tasks and food groups by the app.
+export const AWAITING_FLAGS = ['added_from_onenote', 'auto_filled'] as const
 
 type Page = PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
 
@@ -50,21 +61,23 @@ async function fetchAll<T>(build: (from: number, to: number) => Page): Promise<T
 
 export const loadOverview = (): Promise<OverviewData> =>
   readThrough('overview', async () => {
-    const [recipes, lines, suggestions, templates, groups] = await Promise.all([
+    const [recipes, flags, lines, suggestions, templates, groups] = await Promise.all([
       fetchAll<OverviewRecipe>((a, b) => supabase.from('recipes').select('id,title,section,custom_tags').is('deleted_at', null).order('id').range(a, b)),
+      fetchAll<OverviewFlag>((a, b) => supabase.from('recipe_flags').select('id,recipe_id,flag,status').in('flag', [...AWAITING_FLAGS]).order('id').range(a, b)),
       fetchAll<Line>((a, b) => supabase.from('recipe_ingredients').select('recipe_id,position,text').order('recipe_id').order('position').range(a, b)),
       fetchAll<Line>((a, b) => supabase.from('recipe_ingredient_suggestions').select('recipe_id,position,text').eq('status', 'confirmed').order('recipe_id').order('position').range(a, b)),
       fetchAll<OverviewTemplate>((a, b) => supabase.from('recipe_prep_templates').select('recipe_id,kind,timing,body,position').order('recipe_id').order('position').order('id').range(a, b)),
       fetchAll<{ recipe_id: string; food_group: FoodGroup }>((a, b) => supabase.from('recipe_food_groups').select('recipe_id,food_group').order('recipe_id').order('food_group').range(a, b)),
     ])
-    return { recipes, lines, suggestions, templates, groups }
+    return { recipes, flags, lines, suggestions, templates, groups }
   })
 
 // ---- Pure helpers (tested) ----
 
-export type Problem = 'no_tags' | 'no_ingredients' | 'no_prep' | 'cut_missing' | 'no_groups'
+export type Problem = 'awaiting' | 'no_tags' | 'no_ingredients' | 'no_prep' | 'cut_missing' | 'no_groups'
 
 export const PROBLEM_LABELS: Record<Problem, string> = {
+  awaiting: 'تنتظر اعتمادكِ',
   no_tags: 'بلا وسوم',
   no_ingredients: 'بلا مقادير',
   no_prep: 'بلا تجهيزات',
@@ -88,6 +101,7 @@ export interface OverviewRow {
   prep: PrepItem[]
   uncut: string[] // vegetables in a chopping task that have no cutting method next to them
   groups: FoodGroup[]
+  awaiting: string[] // the open flags that keep it waiting for approval
   problems: Problem[]
 }
 
@@ -114,6 +128,7 @@ export function buildOverview(data: OverviewData): OverviewRow[] {
   const suggestions = by(data.suggestions)
   const templates = by(data.templates)
   const groups = by(data.groups)
+  const flags = by(data.flags)
 
   return data.recipes.map((recipe) => {
     const written = (lines.get(recipe.id) ?? []).sort((a, b) => a.position - b.position).map((l) => l.text)
@@ -123,7 +138,9 @@ export function buildOverview(data: OverviewData): OverviewRow[] {
     const uncut = tasks.flatMap((t) => uncutVegetables(t.body))
     const have = new Set((groups.get(recipe.id) ?? []).map((g) => g.food_group))
     const tags = recipe.custom_tags ?? []
+    const awaiting = (flags.get(recipe.id) ?? []).filter((f) => f.status === 'open' && (AWAITING_FLAGS as readonly string[]).includes(f.flag)).map((f) => f.id)
     const problems: Problem[] = []
+    if (awaiting.length > 0) problems.push('awaiting')
     if (tags.length === 0) problems.push('no_tags')
     if (used.lines.length === 0) problems.push('no_ingredients')
     if (tasks.length === 0) problems.push('no_prep')
@@ -139,6 +156,7 @@ export function buildOverview(data: OverviewData): OverviewRow[] {
       prep: tasks.map((t) => ({ label: `${KIND_LABELS[t.kind]} · ${TIMING_LABELS[t.timing]}`, body: t.body })),
       uncut,
       groups: FOOD_GROUPS.filter((g) => have.has(g)),
+      awaiting,
       problems,
     }
   })
