@@ -11,16 +11,33 @@ const data: OverviewData = {
   ],
   lines: [{ recipe_id: 'a', position: 1, text: 'كريمة طبخ' }],
   suggestions: [{ recipe_id: 'b', position: 1, text: '٢٤ اوريو' }],
-  templates: [{ recipe_id: 'a', kind: 'wash_chop', timing: 'before_cooking', body: 'تقطيع الخضار: بصل، جزر (مبشور)', position: 1 }],
+  templates: [{ id: 't1', recipe_id: 'a', kind: 'wash_chop', timing: 'before_cooking', at_time: null, body: 'تقطيع الخضار: بصل، جزر (مبشور)', position: 1 }],
   groups: [{ recipe_id: 'a', food_group: 'dairy' }],
 }
 const page = { page_id: 'p1', title: 'كبسة الروبيان', section_name: 'أرزاز ومكرونات (سمك)', web_url: 'https://onenote.example/p1' }
 
-function fakeApi(pending: Pending = { pages: [], checkedAt: null }): OverviewApi & { approved: string[]; reviewed: string[] } {
-  const state = { pending, approved: [] as string[], reviewed: [] as string[], flags: data.flags }
-  return {
+type Fake = OverviewApi & { approved: string[]; reviewed: string[]; edits: string[]; failWith?: string }
+
+function fakeApi(pending: Pending = { pages: [], checkedAt: null }): Fake {
+  const state = { pending, approved: [] as string[], reviewed: [] as string[], edits: [] as string[] }
+  const fake: Fake = {
     approved: state.approved,
     reviewed: state.reviewed,
+    edits: state.edits,
+    setTags: async (id, tags) => {
+      if (fake.failWith) throw new Error(fake.failWith)
+      state.edits.push(`tags ${id} ${tags.join('|')}`)
+    },
+    setGroups: async (id, groups) => {
+      state.edits.push(`groups ${id} ${groups.join('|')}`)
+    },
+    saveTask: async (recipeId, id, task) => {
+      state.edits.push(`task ${recipeId} ${id ?? 'new'} ${task.kind} ${task.timing} ${task.body}`)
+      return id ?? 'tNew'
+    },
+    removeTask: async (id) => {
+      state.edits.push(`remove ${id}`)
+    },
     approveRecipes: async (ids) => {
       state.reviewed.push(...ids)
     },
@@ -33,6 +50,7 @@ function fakeApi(pending: Pending = { pages: [], checkedAt: null }): OverviewApi
     },
     checkNow: async () => ({ pages: 135, unlinked: 1, missing: [], refreshed: 4, changed: 0 }),
   }
+  return fake
 }
 const api = fakeApi()
 
@@ -52,10 +70,10 @@ describe('the review page', () => {
     await screen.findByText('إيدام دجاج بالكريمة')
     fireEvent.click(screen.getByText('افتحي الكل'))
     expect(screen.getByText('كريمة طبخ')).toBeTruthy()
-    expect(screen.getByText('تقطيع الخضار: بصل، جزر (مبشور)')).toBeTruthy()
-    expect(screen.getByText('بلا طريقة تقطيع: بصل')).toBeTruthy()
+    expect(screen.getByDisplayValue('تقطيع الخضار: بصل، جزر (مبشور)')).toBeTruthy()
+    expect(screen.getByText(/بلا طريقة تقطيع: بصل\./)).toBeTruthy()
     expect(screen.getByText('٢٤ اوريو')).toBeTruthy() // the ones she confirmed in the app
-    expect(screen.getAllByRole('link', { name: 'افتحي الوصفة للتعديل' })[0].getAttribute('href')).toBe('#/r/a')
+    expect(screen.getAllByRole('link', { name: 'افتحي الوصفة' })[0].getAttribute('href')).toBe('#/r/a')
   })
 
   it('narrows the list by what is missing', async () => {
@@ -104,7 +122,7 @@ describe('new pages from OneNote waiting for approval', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'اعتمدي كوصفة' }))
     expect(await screen.findByText(/اعتُمدت «كبسة الروبيان» وانتقلت إلى الوصفات. ملأتُ لها وسومًا/)).toBeTruthy()
     expect(fake.approved).toEqual(['p1'])
-    expect(screen.getByRole('link', { name: 'افتحي الوصفة' }).getAttribute('href')).toBe('#/r/new-1')
+    expect(screen.getAllByRole('link', { name: 'افتحي الوصفة' }).some((l) => l.getAttribute('href') === '#/r/new-1')).toBe(true)
     await waitFor(() => expect(screen.getByText('صفحات جديدة من OneNote تنتظر اعتمادكِ (0)')).toBeTruthy())
     expect(heard.at(-1)).toBe(0) // the menu is told
   })
@@ -147,5 +165,59 @@ describe('recipes waiting for her approval', () => {
     expect(fake.reviewed).toEqual([]) // nothing yet: it asks first
     fireEvent.click(screen.getByRole('button', { name: 'نعم، اعتمدي الكل' }))
     await waitFor(() => expect(fake.reviewed).toEqual(['f9']))
+  })
+})
+
+describe('changing a recipe right in the list', () => {
+  const open = async (fake: Fake) => {
+    render(<OverviewPage api={fake} />)
+    await screen.findByText('إيدام دجاج بالكريمة')
+    fireEvent.click(screen.getByText('افتحي الكل'))
+  }
+
+  it('adds and removes a tag, and the list shows it at once', async () => {
+    const fake = fakeApi()
+    await open(fake)
+    const input = screen.getAllByLabelText('وسم جديد')[1] // the second row: «حلا الاوريو»
+    fireEvent.change(input, { target: { value: 'حلا' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(fake.edits).toEqual(['tags b حلا']))
+    fireEvent.click(await screen.findByRole('button', { name: 'احذفي الوسم دجاج' }))
+    await waitFor(() => expect(fake.edits).toContain('tags a '))
+  })
+
+  it('switches a food group on and off', async () => {
+    const fake = fakeApi()
+    await open(fake)
+    const groups = screen.getAllByRole('group', { name: 'العناصر الغذائية' })
+    fireEvent.click(within(groups[1]).getByRole('button', { name: 'نشويات' })) // «حلا الاوريو» has none yet
+    await waitFor(() => expect(fake.edits).toEqual(['groups b carbs']))
+    fireEvent.click(within(groups[0]).getByRole('button', { name: 'ألبان' })) // «إيدام» has dairy: off
+    await waitFor(() => expect(fake.edits).toContain('groups a '))
+  })
+
+  it('edits, adds and deletes a prep task', async () => {
+    const fake = fakeApi()
+    await open(fake)
+    const text = screen.getByLabelText('نص التجهيز')
+    fireEvent.change(text, { target: { value: 'تقطيع الخضار: بصل (مفروم)، جزر (مبشور)' } })
+    fireEvent.blur(text)
+    await waitFor(() => expect(fake.edits).toEqual(['task a t1 wash_chop before_cooking تقطيع الخضار: بصل (مفروم)، جزر (مبشور)']))
+    fireEvent.change(screen.getAllByLabelText('تجهيز جديد')[1], { target: { value: 'انقعي الأرز' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'أضيفي' })[1])
+    await waitFor(() => expect(fake.edits.at(-1)).toBe('task b new other before_cooking انقعي الأرز'))
+    fireEvent.click(screen.getAllByRole('button', { name: 'احذفي التجهيز' })[0])
+    await waitFor(() => expect(fake.edits.at(-1)).toBe('remove t1'))
+  })
+
+  it('shows a failed save in the same row, and leaves the list as it was', async () => {
+    const fake = fakeApi()
+    fake.failWith = 'تعدّلت هذه الوصفة من مكان آخر'
+    await open(fake)
+    const input = screen.getAllByLabelText('وسم جديد')[1]
+    fireEvent.change(input, { target: { value: 'حلا' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(await screen.findByText('تعدّلت هذه الوصفة من مكان آخر')).toBeTruthy()
+    expect(fake.edits).toEqual([])
   })
 })

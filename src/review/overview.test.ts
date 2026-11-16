@@ -21,8 +21,8 @@ const data: OverviewData = {
     { recipe_id: 'b', position: 2, text: 'قشطة' },
   ],
   templates: [
-    { recipe_id: 'a', kind: 'defrost', timing: 'morning', body: 'أخرجي الدجاج من الفريزر', position: 1 },
-    { recipe_id: 'a', kind: 'wash_chop', timing: 'before_cooking', body: 'تقطيع الخضار: بصل (مفروم)، جزر، فلفل رومي', position: 4 },
+    { id: 't1', recipe_id: 'a', kind: 'defrost', timing: 'morning', at_time: null, body: 'أخرجي الدجاج من الفريزر', position: 1 },
+    { id: 't2', recipe_id: 'a', kind: 'wash_chop', timing: 'before_cooking', at_time: null, body: 'تقطيع الخضار: بصل (مفروم)، جزر، فلفل رومي', position: 4 },
   ],
   groups: [
     { recipe_id: 'a', food_group: 'protein' },
@@ -55,8 +55,8 @@ describe('one row per recipe', () => {
 
   it('shows the prep tasks with their kind and time, and the groups in a fixed order', () => {
     expect(byId('a').prep).toEqual([
-      { label: 'إذابة · صباحًا', body: 'أخرجي الدجاج من الفريزر' },
-      { label: 'غسل وتقطيع · قبل الطبخ', body: 'تقطيع الخضار: بصل (مفروم)، جزر، فلفل رومي' },
+      { id: 't1', kind: 'defrost', timing: 'morning', atTime: null, label: 'إذابة · صباحًا', body: 'أخرجي الدجاج من الفريزر' },
+      { id: 't2', kind: 'wash_chop', timing: 'before_cooking', atTime: null, label: 'غسل وتقطيع · قبل الطبخ', body: 'تقطيع الخضار: بصل (مفروم)، جزر، فلفل رومي' },
     ])
     expect(byId('a').groups).toEqual(['protein', 'dairy'])
   })
