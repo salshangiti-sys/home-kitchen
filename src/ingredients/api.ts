@@ -88,7 +88,7 @@ export interface ReviewGroup {
 const bySectionThenTitle = (a: ReviewGroup, b: ReviewGroup) => a.recipe.section.localeCompare(b.recipe.section, 'ar') || a.recipe.title.localeCompare(b.recipe.title, 'ar')
 
 // The suggestions grouped by recipe: the recipes with lines still waiting first, the ones fully
-// reviewed apart. A suggestion whose recipe is not in `recipes` (in the trash) is left out; a stored line that holds several (an invisible line break between them) is split.
+// reviewed apart. A suggestion whose recipe is not in `recipes` (in the trash) is left out.
 export function groupReview(data: ReviewData): { waiting: ReviewGroup[]; done: ReviewGroup[] } {
   const recipes = new Map(data.recipes.map((r) => [r.id, r]))
   const byRecipe = new Map<string, Suggestion[]>()
@@ -102,7 +102,8 @@ export function groupReview(data: ReviewData): { waiting: ReviewGroup[]; done: R
 
 // The ingredient lines the app uses for a recipe: the ones read from OneNote when there are any;
 // otherwise the lines the person confirmed here (in order). Lines still waiting or ignored are never used.
-// A label line («الحشوة:», «وصوص التغميس:») names a part of the recipe and is not an ingredient: it is left out.
+// A label line («الحشوة:», «وصوص التغميس:») names a part of the recipe and is not an ingredient: it is left out;
+// a stored line that holds several (an invisible line break between them) is split.
 export function usableIngredients(oneNoteLines: string[], suggestions: Suggestion[]): { lines: string[]; from: 'onenote' | 'app' | 'none' } {
   const written = oneNoteLines.flatMap(splitInline).filter((line) => !isLabelLine(line))
   if (written.length) return { lines: written, from: 'onenote' }

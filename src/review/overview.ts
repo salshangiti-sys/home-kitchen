@@ -1,0 +1,169 @@
+// «مراجعة»: every recipe's tags, ingredients, prep tasks and food groups in one list, read live from
+// the database, to check them quickly and see what is still missing. Reading only: each recipe's own
+// page is where anything is changed.
+
+import { supabase } from '../lib/supabase'
+import { readThrough } from '../offline/readThrough'
+import { usableIngredients, type Suggestion } from '../ingredients/api'
+import { FOOD_GROUPS, type FoodGroup } from '../nutrition/api'
+import { KIND_LABELS, TIMING_LABELS, type PrepKind, type PrepTiming } from '../prep/api'
+
+export interface OverviewRecipe {
+  id: string
+  title: string
+  section: string
+  custom_tags: string[]
+}
+interface Line {
+  recipe_id: string
+  position: number
+  text: string
+}
+export interface OverviewTemplate {
+  recipe_id: string
+  kind: PrepKind
+  timing: PrepTiming
+  body: string
+  position: number
+}
+export interface OverviewData {
+  recipes: OverviewRecipe[]
+  lines: Line[]
+  suggestions: Line[] // the confirmed ones only
+  templates: OverviewTemplate[]
+  groups: Array<{ recipe_id: string; food_group: FoodGroup }>
+}
+
+const PAGE = 1000 // the most rows one request returns
+
+type Page = PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+
+async function fetchAll<T>(build: (from: number, to: number) => Page): Promise<T[]> {
+  const out: T[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await build(from, from + PAGE - 1)
+    if (error) throw new Error(error.message)
+    out.push(...((data ?? []) as T[]))
+    if (!data || data.length < PAGE) return out
+  }
+}
+
+export const loadOverview = (): Promise<OverviewData> =>
+  readThrough('overview', async () => {
+    const [recipes, lines, suggestions, templates, groups] = await Promise.all([
+      fetchAll<OverviewRecipe>((a, b) => supabase.from('recipes').select('id,title,section,custom_tags').is('deleted_at', null).order('id').range(a, b)),
+      fetchAll<Line>((a, b) => supabase.from('recipe_ingredients').select('recipe_id,position,text').order('recipe_id').order('position').range(a, b)),
+      fetchAll<Line>((a, b) => supabase.from('recipe_ingredient_suggestions').select('recipe_id,position,text').eq('status', 'confirmed').order('recipe_id').order('position').range(a, b)),
+      fetchAll<OverviewTemplate>((a, b) => supabase.from('recipe_prep_templates').select('recipe_id,kind,timing,body,position').order('recipe_id').order('position').order('id').range(a, b)),
+      fetchAll<{ recipe_id: string; food_group: FoodGroup }>((a, b) => supabase.from('recipe_food_groups').select('recipe_id,food_group').order('recipe_id').order('food_group').range(a, b)),
+    ])
+    return { recipes, lines, suggestions, templates, groups }
+  })
+
+// ---- Pure helpers (tested) ----
+
+export type Problem = 'no_tags' | 'no_ingredients' | 'no_prep' | 'cut_missing' | 'no_groups'
+
+export const PROBLEM_LABELS: Record<Problem, string> = {
+  no_tags: 'بلا وسوم',
+  no_ingredients: 'بلا مقادير',
+  no_prep: 'بلا تجهيزات',
+  cut_missing: 'تقطيع بلا طريقة',
+  no_groups: 'بلا عناصر غذائية',
+}
+export const PROBLEMS = Object.keys(PROBLEM_LABELS) as Problem[]
+
+export interface PrepItem {
+  label: string // «إخراج من الفريزر · صباحًا»
+  body: string
+}
+
+export interface OverviewRow {
+  id: string
+  title: string
+  section: string
+  tags: string[]
+  ingredients: string[]
+  ingredientsFromApp: boolean // the lines are the ones she confirmed in the app, not the page's
+  prep: PrepItem[]
+  uncut: string[] // vegetables in a chopping task that have no cutting method next to them
+  groups: FoodGroup[]
+  problems: Problem[]
+}
+
+const CHOP_PREFIX = 'تقطيع الخضار:'
+
+// The vegetables of a chopping task («تقطيع الخضار: بصل (مفروم)، جزر») that have no «(طريقة)» beside them.
+export function uncutVegetables(body: string): string[] {
+  if (!body.trim().startsWith(CHOP_PREFIX)) return []
+  const list = body.trim().slice(CHOP_PREFIX.length)
+  // split at the commas that are not inside a bracket («بطاطس (شرائح، مسلوقة)»)
+  return list
+    .split(/،\s*(?![^()]*\))/)
+    .map((item) => item.trim())
+    .filter((item) => item && !item.includes('('))
+}
+
+export function buildOverview(data: OverviewData): OverviewRow[] {
+  const by = <T extends { recipe_id: string }>(rows: T[]) => {
+    const map = new Map<string, T[]>()
+    for (const row of rows) map.set(row.recipe_id, [...(map.get(row.recipe_id) ?? []), row])
+    return map
+  }
+  const lines = by(data.lines)
+  const suggestions = by(data.suggestions)
+  const templates = by(data.templates)
+  const groups = by(data.groups)
+
+  return data.recipes.map((recipe) => {
+    const written = (lines.get(recipe.id) ?? []).sort((a, b) => a.position - b.position).map((l) => l.text)
+    const confirmed = (suggestions.get(recipe.id) ?? []).map((s) => ({ status: 'confirmed', position: s.position, text: s.text }) as Suggestion)
+    const used = usableIngredients(written, confirmed)
+    const tasks = (templates.get(recipe.id) ?? []).sort((a, b) => a.position - b.position)
+    const uncut = tasks.flatMap((t) => uncutVegetables(t.body))
+    const have = new Set((groups.get(recipe.id) ?? []).map((g) => g.food_group))
+    const tags = recipe.custom_tags ?? []
+    const problems: Problem[] = []
+    if (tags.length === 0) problems.push('no_tags')
+    if (used.lines.length === 0) problems.push('no_ingredients')
+    if (tasks.length === 0) problems.push('no_prep')
+    if (uncut.length > 0) problems.push('cut_missing')
+    if (have.size === 0) problems.push('no_groups')
+    return {
+      id: recipe.id,
+      title: recipe.title,
+      section: recipe.section,
+      tags,
+      ingredients: used.lines,
+      ingredientsFromApp: used.from === 'app',
+      prep: tasks.map((t) => ({ label: `${KIND_LABELS[t.kind]} · ${TIMING_LABELS[t.timing]}`, body: t.body })),
+      uncut,
+      groups: FOOD_GROUPS.filter((g) => have.has(g)),
+      problems,
+    }
+  })
+}
+
+export interface Filters {
+  query: string
+  section: string | null
+  problem: Problem | null
+  tag: string | null
+}
+
+const norm = (text: string) => text.replace(/[ً-ٟـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase().trim()
+
+export function filterRows(rows: OverviewRow[], f: Filters): OverviewRow[] {
+  const q = norm(f.query)
+  return rows.filter(
+    (r) =>
+      (!f.section || r.section === f.section) &&
+      (!f.problem || r.problems.includes(f.problem)) &&
+      (!f.tag || r.tags.includes(f.tag)) &&
+      (!q || norm(r.title).includes(q) || r.tags.some((t) => norm(t).includes(q))),
+  )
+}
+
+export function problemCounts(rows: OverviewRow[]): Array<[Problem, number]> {
+  return PROBLEMS.map((p) => [p, rows.filter((r) => r.problems.includes(p)).length] as [Problem, number])
+}

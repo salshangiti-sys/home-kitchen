@@ -16,6 +16,7 @@ export type Route =
   | { name: 'import' }
   | { name: 'restore' }
   | { name: 'ingredients' } // review of ingredients proposed from the recipe text
+  | { name: 'overview' } // every recipe's tags, ingredients, prep and food groups to review
   | { name: 'trash' }
   | { name: 'onenote' }
 
@@ -39,6 +40,7 @@ export function parseHash(hash: string): Route {
   if (parts[0] === 'import') return { name: 'import' }
   if (parts[0] === 'restore') return { name: 'restore' }
   if (parts[0] === 'ingredients') return { name: 'ingredients' }
+  if (parts[0] === 'overview') return { name: 'overview' }
   if (parts[0] === 'trash') return { name: 'trash' }
   if (parts[0] === 'onenote') return { name: 'onenote' }
   return { name: 'library' }
@@ -59,6 +61,7 @@ export const href = {
   import: '#/import',
   restore: '#/restore',
   ingredients: '#/ingredients',
+  overview: '#/overview',
   trash: '#/trash',
   onenote: '#/onenote',
 }

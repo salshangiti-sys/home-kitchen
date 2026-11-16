@@ -19,6 +19,7 @@ describe('parseHash', () => {
     ['#/plan/nonsense', { name: 'plan' }],
     ['#/restore', { name: 'restore' }],
     ['#/trash', { name: 'trash' }],
+    ['#/overview', { name: 'overview' }],
     ['#/r/salads-007/cook', { name: 'cook', id: 'salads-007' }],
     ['#/r/salads-007/cooked', { name: 'recipe', id: 'salads-007', logging: true }],
     ['#/onenote', { name: 'onenote' }],
