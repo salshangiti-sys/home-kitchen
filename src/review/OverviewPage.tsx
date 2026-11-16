@@ -1,15 +1,18 @@
 // «مراجعة»: all recipes in one list with their tags, ingredients, prep tasks and food groups, and the
-// recipes that are still missing something. For reading and checking; to change a recipe, open it.
+// recipes that are still missing something. Tags, food groups and prep tasks are changed right here and
+// saved at once; the ingredients come from the OneNote page, so they are changed there.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { href } from '../router'
 import { Badge, Button, Card, LinkButton, Notice } from '../ui'
 import { addPageAsRecipe, checkNotebook, listUnlinked, loadLibrary, timeAgo, type CheckSummary, type UnlinkedPage } from '../library/onenote'
 import { sectionsOf } from '../library/sections'
-import { setFlagStatus } from '../library/api'
+import { loadRecipe, saveRecipe, setFlagStatus } from '../library/api'
 import { autofillRecipe } from './apply'
 import type { Autofill } from './autofill'
-import { FOOD_GROUP_LABELS } from '../nutrition/api'
+import { setFoodGroups, type FoodGroup } from '../nutrition/api'
+import { removeTemplate, saveTemplate, type TemplateInput } from '../prep/api'
+import { GroupsEditor, PrepEditor, TagsEditor } from './editors'
 import { PROBLEM_LABELS, buildOverview, filterRows, loadOverview, problemCounts, type OverviewData, type OverviewRow, type Problem } from './overview'
 
 export interface Pending {
@@ -23,6 +26,10 @@ export interface OverviewApi {
   approve: (pageId: string) => Promise<{ recipeId: string; filled: Autofill | null }> // makes the recipe, and fills in a starting set
   approveRecipes: (flagIds: string[]) => Promise<void> // she has reviewed these recipes
   checkNow: () => Promise<CheckSummary>
+  setTags: (recipeId: string, tags: string[]) => Promise<void>
+  setGroups: (recipeId: string, groups: FoodGroup[]) => Promise<void>
+  saveTask: (recipeId: string, id: string | null, task: TemplateInput) => Promise<string> // the task's id
+  removeTask: (id: string) => Promise<void>
 }
 const real: OverviewApi = {
   loadOverview,
@@ -40,6 +47,14 @@ const real: OverviewApi = {
     for (const id of flagIds) await setFlagStatus(id, 'reviewed')
   },
   checkNow: checkNotebook,
+  setTags: async (recipeId, tags) => {
+    const loaded = await loadRecipe(recipeId)
+    if (!loaded) throw new Error('الوصفة غير موجودة.')
+    await saveRecipe({ ...loaded.doc, tags: { ...(loaded.doc.tags ?? {}), custom: tags } }, loaded.version)
+  },
+  setGroups: setFoodGroups,
+  saveTask: (recipeId, id, task) => saveTemplate(id, recipeId, task),
+  removeTask: removeTemplate,
 }
 
 // Tells the menu how many pages wait for approval, so its tab can show the number.
@@ -48,7 +63,16 @@ const announce = (count: number) => window.dispatchEvent(new CustomEvent(PENDING
 
 const chip = (active: boolean) => `min-h-9 shrink-0 rounded-full border px-3 text-sm ${active ? 'border-accent bg-accent text-on-accent' : 'border-line text-ink'}`
 
-function Row({ row, open, busy, onApprove }: { row: OverviewRow; open: boolean; busy: boolean; onApprove: (flagIds: string[]) => void }) {
+interface RowActions {
+  onApprove: (flagIds: string[]) => void
+  onTags: (tags: string[]) => void
+  onGroups: (groups: FoodGroup[]) => void
+  onSaveTask: (id: string, task: TemplateInput) => void
+  onRemoveTask: (id: string) => void
+  onAddTask: (task: TemplateInput) => void
+}
+
+function Row({ row, open, busy, error, actions }: { row: OverviewRow; open: boolean; busy: boolean; error: string | null; actions: RowActions }) {
   return (
     <details open={open} className="rounded-2xl border border-line bg-surface p-3">
       <summary className="flex cursor-pointer flex-col gap-1.5">
@@ -62,7 +86,21 @@ function Row({ row, open, busy, onApprove }: { row: OverviewRow; open: boolean; 
           ))}
         </span>
       </summary>
-      <div className="mt-3 flex flex-col gap-3 text-sm">
+      <div className="mt-3 flex flex-col gap-4 text-sm">
+        {error && <Notice tone="error">{error}</Notice>}
+        <section aria-label="الوسوم">
+          <h4 className="mb-1 font-semibold">الوسوم</h4>
+          <TagsEditor tags={row.tags} busy={busy} onChange={actions.onTags} />
+        </section>
+        <section aria-label="العناصر الغذائية">
+          <h4 className="mb-1 font-semibold">العناصر الغذائية</h4>
+          <GroupsEditor groups={row.groups} busy={busy} onChange={actions.onGroups} />
+        </section>
+        <section aria-label="التجهيزات">
+          <h4 className="mb-1 font-semibold">التجهيزات</h4>
+          <PrepEditor items={row.prep} busy={busy} onSave={actions.onSaveTask} onRemove={actions.onRemoveTask} onAdd={actions.onAddTask} />
+          {row.uncut.length > 0 && <p className="mt-1 text-amber-800 dark:text-amber-300">بلا طريقة تقطيع: {row.uncut.join('، ')}. اكتبيها في نص التجهيز، مثل «بصل (مفروم ناعم)».</p>}
+        </section>
         <section aria-label="المقادير">
           <h4 className="font-semibold">المقادير{row.ingredientsFromApp ? ' (المؤكَّدة في التطبيق)' : ''}</h4>
           {row.ingredients.length === 0 ? (
@@ -74,34 +112,21 @@ function Row({ row, open, busy, onApprove }: { row: OverviewRow; open: boolean; 
               ))}
             </ul>
           )}
-        </section>
-        <section aria-label="التجهيزات">
-          <h4 className="font-semibold">التجهيزات</h4>
-          {row.prep.length === 0 ? (
-            <p className="text-muted">لا تجهيزات.</p>
-          ) : (
-            <ul className="mt-1 flex flex-col gap-1">
-              {row.prep.map((item, i) => (
-                <li key={i} dir="auto">
-                  <span className="text-muted">{item.label}: </span>
-                  {item.body}
-                </li>
-              ))}
-            </ul>
-          )}
-          {row.uncut.length > 0 && <p className="mt-1 text-amber-800 dark:text-amber-300">بلا طريقة تقطيع: {row.uncut.join('، ')}</p>}
-        </section>
-        <section aria-label="العناصر الغذائية">
-          <h4 className="font-semibold">العناصر الغذائية</h4>
-          <p>{row.groups.length ? row.groups.map((g) => FOOD_GROUP_LABELS[g]).join('، ') : <span className="text-muted">لم تُحدَّد.</span>}</p>
+          <p className="mt-1 text-muted">
+            {row.ingredientsFromApp ? (
+              <>تُعدَّل من شاشة <a href={href.ingredients} className="underline">المقادير</a>.</>
+            ) : (
+              'تُعدَّل في صفحة الوصفة في OneNote (لا يغيّر التطبيق صفحاتكِ).'
+            )}
+          </p>
         </section>
         <div className="flex flex-wrap gap-2">
           {row.awaiting.length > 0 && (
-            <Button disabled={busy} onClick={() => onApprove(row.awaiting)}>
+            <Button disabled={busy} onClick={() => actions.onApprove(row.awaiting)}>
               اعتمدي
             </Button>
           )}
-          <LinkButton href={href.recipe(row.id)}>افتحي الوصفة للتعديل</LinkButton>
+          <LinkButton href={href.recipe(row.id)}>افتحي الوصفة</LinkButton>
         </div>
       </div>
     </details>
@@ -120,6 +145,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
   const [tag, setTag] = useState<string | null>(null)
   const [openAll, setOpenAll] = useState(false)
   const [confirmingAll, setConfirmingAll] = useState(false)
+  const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -135,6 +161,20 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
   useEffect(() => {
     void load()
   }, [load])
+
+  // One change inside a row: saved at once, and the list is patched in place so the open rows stay open.
+  const edit = async (recipeId: string, work: () => Promise<void>, patch: (d: OverviewData) => OverviewData) => {
+    setBusy(true)
+    setRowError(null)
+    try {
+      await work()
+      setData((d) => (d ? patch(d) : d))
+    } catch (e) {
+      setRowError({ id: recipeId, text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const act = async (work: () => Promise<{ text: string; recipeId?: string }>) => {
     setBusy(true)
@@ -324,12 +364,45 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
               row={row}
               open={openAll}
               busy={busy}
-              onApprove={(flagIds) =>
-                void act(async () => {
-                  await api.approveRecipes(flagIds)
-                  return { text: `اعتُمدت «${row.title}».` }
-                })
-              }
+              error={rowError?.id === row.id ? rowError.text : null}
+              actions={{
+                onApprove: (flagIds) =>
+                  void act(async () => {
+                    await api.approveRecipes(flagIds)
+                    return { text: `اعتُمدت «${row.title}».` }
+                  }),
+                onTags: (tags) =>
+                  void edit(row.id, () => api.setTags(row.id, tags), (d) => ({ ...d, recipes: d.recipes.map((r) => (r.id === row.id ? { ...r, custom_tags: tags } : r)) })),
+                onGroups: (groups) =>
+                  void edit(
+                    row.id,
+                    () => api.setGroups(row.id, groups),
+                    (d) => ({ ...d, groups: [...d.groups.filter((g) => g.recipe_id !== row.id), ...groups.map((food_group) => ({ recipe_id: row.id, food_group }))] }),
+                  ),
+                onSaveTask: (id, task) =>
+                  void edit(
+                    row.id,
+                    async () => void (await api.saveTask(row.id, id, task)),
+                    (d) => ({ ...d, templates: d.templates.map((t) => (t.id === id ? { ...t, kind: task.kind, timing: task.timing, at_time: task.atTime, body: task.body } : t)) }),
+                  ),
+                onRemoveTask: (id) => void edit(row.id, () => api.removeTask(id), (d) => ({ ...d, templates: d.templates.filter((t) => t.id !== id) })),
+                onAddTask: (task) => {
+                  let newId = ''
+                  void edit(
+                    row.id,
+                    async () => {
+                      newId = await api.saveTask(row.id, null, task)
+                    },
+                    (d) => ({
+                      ...d,
+                      templates: [
+                        ...d.templates,
+                        { id: newId, recipe_id: row.id, kind: task.kind, timing: task.timing, at_time: null, body: task.body, position: Math.max(0, ...d.templates.filter((t) => t.recipe_id === row.id).map((t) => t.position)) + 1 },
+                      ],
+                    }),
+                  )
+                },
+              }}
             />
           ))}
         </div>

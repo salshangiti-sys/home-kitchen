@@ -20,9 +20,11 @@ interface Line {
   text: string
 }
 export interface OverviewTemplate {
+  id: string
   recipe_id: string
   kind: PrepKind
   timing: PrepTiming
+  at_time: string | null
   body: string
   position: number
 }
@@ -66,7 +68,7 @@ export const loadOverview = (): Promise<OverviewData> =>
       fetchAll<OverviewFlag>((a, b) => supabase.from('recipe_flags').select('id,recipe_id,flag,status').in('flag', [...AWAITING_FLAGS]).order('id').range(a, b)),
       fetchAll<Line>((a, b) => supabase.from('recipe_ingredients').select('recipe_id,position,text').order('recipe_id').order('position').range(a, b)),
       fetchAll<Line>((a, b) => supabase.from('recipe_ingredient_suggestions').select('recipe_id,position,text').eq('status', 'confirmed').order('recipe_id').order('position').range(a, b)),
-      fetchAll<OverviewTemplate>((a, b) => supabase.from('recipe_prep_templates').select('recipe_id,kind,timing,body,position').order('recipe_id').order('position').order('id').range(a, b)),
+      fetchAll<OverviewTemplate>((a, b) => supabase.from('recipe_prep_templates').select('id,recipe_id,kind,timing,at_time,body,position').order('recipe_id').order('position').order('id').range(a, b)),
       fetchAll<{ recipe_id: string; food_group: FoodGroup }>((a, b) => supabase.from('recipe_food_groups').select('recipe_id,food_group').order('recipe_id').order('food_group').range(a, b)),
     ])
     return { recipes, flags, lines, suggestions, templates, groups }
@@ -87,7 +89,11 @@ export const PROBLEM_LABELS: Record<Problem, string> = {
 export const PROBLEMS = Object.keys(PROBLEM_LABELS) as Problem[]
 
 export interface PrepItem {
-  label: string // «إخراج من الفريزر · صباحًا»
+  id: string
+  kind: PrepKind
+  timing: PrepTiming
+  atTime: string | null
+  label: string // «إذابة · صباحًا»
   body: string
 }
 
@@ -153,7 +159,7 @@ export function buildOverview(data: OverviewData): OverviewRow[] {
       tags,
       ingredients: used.lines,
       ingredientsFromApp: used.from === 'app',
-      prep: tasks.map((t) => ({ label: `${KIND_LABELS[t.kind]} · ${TIMING_LABELS[t.timing]}`, body: t.body })),
+      prep: tasks.map((t) => ({ id: t.id, kind: t.kind, timing: t.timing, atTime: t.at_time, label: `${KIND_LABELS[t.kind]} · ${TIMING_LABELS[t.timing]}`, body: t.body })),
       uncut,
       groups: FOOD_GROUPS.filter((g) => have.has(g)),
       awaiting,
