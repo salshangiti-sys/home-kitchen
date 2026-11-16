@@ -60,6 +60,16 @@ begin
   select count(*) into n from public.freezer_items where id = item;
   if n <> 0 then raise exception 'FAILED: an item with nothing left should be removed'; end if;
 
+  -- using the last piece takes it to zero: the item goes (the table never holds a zero)
+  item := public.save_freezer_item(null, 'قطعة أخيرة', 1, 'قطعة', null, null, null);
+  left_over := public.use_freezer_item(item);
+  if left_over <> 0 then raise exception 'FAILED: using the last piece should leave 0, got %', left_over; end if;
+  select count(*) into n from public.freezer_items where id = item;
+  if n <> 0 then raise exception 'FAILED: the last piece used should remove the item'; end if;
+  item := public.save_freezer_item(null, 'قطعتان', 2, 'قطعة', null, null, null);
+  left_over := public.use_freezer_item(item, 2);
+  if left_over <> 0 then raise exception 'FAILED: using all of it should leave 0, got %', left_over; end if;
+
   -- the rules
   begin perform public.save_freezer_item(null, 'x', 0, 'قطعة', null, null, null); raise exception 'FAILED: a zero quantity was accepted';
   exception when check_violation then null; end;

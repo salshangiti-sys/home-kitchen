@@ -75,7 +75,7 @@ set search_path = ''
 as $$
 declare
   hid uuid := private.my_edit_household();
-  left_over numeric;
+  current_qty numeric;
 begin
   if hid is null then
     raise exception 'not allowed' using errcode = '42501';
@@ -83,17 +83,17 @@ begin
   if p_amount is null or p_amount <= 0 then
     raise exception 'bad_amount' using errcode = 'P0001';
   end if;
-  update public.freezer_items f set quantity = f.quantity - p_amount, updated_at = now()
-  where f.id = p_id and f.household_id = hid
-  returning f.quantity into left_over;
-  if left_over is null then
+  -- read first: a quantity of zero or less is never written (the table does not allow it)
+  select f.quantity into current_qty from public.freezer_items f where f.id = p_id and f.household_id = hid for update;
+  if current_qty is null then
     raise exception 'item_not_found' using errcode = 'P0001';
   end if;
-  if left_over <= 0 then
+  if current_qty - p_amount <= 0 then
     delete from public.freezer_items where id = p_id and household_id = hid;
     return 0;
   end if;
-  return left_over;
+  update public.freezer_items f set quantity = f.quantity - p_amount, updated_at = now() where f.id = p_id and f.household_id = hid;
+  return current_qty - p_amount;
 end;
 $$;
 
