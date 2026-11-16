@@ -111,7 +111,7 @@ export default function BulkTagPanel({ ids, onApplied, onClose, api = { bulkTag 
           value={choices.custom}
           onChange={(e) => update({ custom: e.target.value })}
           placeholder="مثال: سريعة، عائلية"
-          className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal"
+          className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl"
         />
       </label>
 
@@ -141,7 +141,7 @@ function ChoiceSelect({ label, value, onChange }: { label: string; value: Choice
   return (
     <label className="flex flex-col gap-1 text-sm font-medium">
       {label}
-      <select value={value} onChange={(e) => onChange(e.target.value as Choice)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+      <select value={value} onChange={(e) => onChange(e.target.value as Choice)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
         {CHOICES.map(([choice, text]) => (
           <option key={choice} value={choice}>{text}</option>
         ))}

@@ -88,11 +88,11 @@ export default function AddToPlan({ recipeId, title = 'وصفة', today = todayI
         >
           <label className="flex flex-col gap-1 text-sm font-medium">
             اليوم
-            <input type="date" required value={day} onChange={(e) => setDay(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+            <input type="date" required value={day} onChange={(e) => setDay(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">
             الوجبة
-            <select value={slot} onChange={(e) => setSlot(e.target.value)} disabled={!slots} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+            <select value={slot} onChange={(e) => setSlot(e.target.value)} disabled={!slots} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
               {!slots && <option value="">جارٍ التحميل…</option>}
               {slots?.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -102,7 +102,7 @@ export default function AddToPlan({ recipeId, title = 'وصفة', today = todayI
           {slots && slots.length === 0 && <p className="text-sm text-muted">لا خانات وجبات بعد: أنشئيها من صفحة الخطة أولًا.</p>}
           <label className="flex flex-col gap-1 text-sm font-medium">
             عدد الحصص (اختياري)
-            <input inputMode="numeric" dir="ltr" value={servings} onChange={(e) => setServings(e.target.value)} className="min-h-11 w-28 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+            <input inputMode="numeric" dir="ltr" value={servings} onChange={(e) => setServings(e.target.value)} className="min-h-11 w-28 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
           </label>
           <div className="flex gap-2">
             <Button type="submit" disabled={busy || !ready}>أضيفي</Button>

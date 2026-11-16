@@ -33,7 +33,7 @@ export default function MealRow({ meal, people, slots, days, canEdit, busy, onUp
   const toggle = (id: string) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]))
 
   return (
-    <li className="flex flex-col gap-2 rounded-xl border border-line px-3 py-2">
+    <li className="flex flex-col gap-2 px-3 py-2 rounded-2xl bg-surface ring-1 ring-line">
       <div className="flex flex-wrap items-center gap-2">
         {meal.recipe_id ? (
           <a href={href.recipe(meal.recipe_id)} dir="auto" className={`font-medium text-accent underline ${meal.status === 'skipped' ? 'line-through opacity-60' : ''}`}>{meal.title}</a>
@@ -64,13 +64,13 @@ export default function MealRow({ meal, people, slots, days, canEdit, busy, onUp
         >
           <label className="flex flex-col gap-1 text-sm font-medium">
             عدد الحصص (اختياري)
-            <input type="number" min="1" max="100" step="any" inputMode="decimal" value={servings} onChange={(e) => setServings(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+            <input type="number" min="1" max="100" step="any" inputMode="decimal" value={servings} onChange={(e) => setServings(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
           </label>
           {people.length > 0 && (
             <fieldset className="flex flex-wrap gap-2">
               <legend className="mb-1 text-sm font-medium">لمن؟</legend>
               {people.map((p) => (
-                <label key={p.id} className="flex min-h-11 items-center gap-2 rounded-xl border border-line px-3 text-sm">
+                <label key={p.id} className="flex min-h-11 items-center gap-2 border border-line px-3 text-sm rounded-2xl">
                   <input type="checkbox" checked={chosen.includes(p.id)} onChange={() => toggle(p.id)} className="size-5 accent-[var(--accent)]" />
                   {p.name}
                 </label>
@@ -79,7 +79,7 @@ export default function MealRow({ meal, people, slots, days, canEdit, busy, onUp
           )}
           <label className="flex flex-col gap-1 text-sm font-medium">
             الحالة
-            <select value={status} onChange={(e) => setStatus(e.target.value as MealStatus)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+            <select value={status} onChange={(e) => setStatus(e.target.value as MealStatus)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
               {(Object.keys(STATUS_LABELS) as MealStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
             </select>
           </label>
@@ -94,13 +94,13 @@ export default function MealRow({ meal, people, slots, days, canEdit, busy, onUp
         <div className="flex flex-col gap-3 rounded-lg border border-line p-3">
           <label className="flex flex-col gap-1 text-sm font-medium">
             إلى يوم
-            <select value={day} onChange={(e) => setDay(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+            <select value={day} onChange={(e) => setDay(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
               {days.map((d) => <option key={d} value={d}>{weekdayName(d)} {dayLabel(d)}</option>)}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">
             وإلى خانة
-            <select value={slot} onChange={(e) => setSlot(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+            <select value={slot} onChange={(e) => setSlot(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
               {slots.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </label>

@@ -90,7 +90,7 @@ export default function RecipeEditor({ id }: { id: string | null }) {
       <h2 className="text-2xl font-bold">{planning ? 'الوسوم والتخطيط' : id ? 'تعديل الوصفة' : 'وصفة جديدة'}</h2>
 
       {planning && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4">
+        <div className="flex flex-col gap-3 bg-surface p-4 rounded-3xl shadow-sm ring-1 ring-line">
           <p dir="auto" className="font-semibold">{fields.title}</p>
           <p className="text-sm text-muted">نص هذه الوصفة في صفحتها في OneNote، ويُعدّل هناك. يقرأ التطبيق الصفحة كلما فتحتِ الوصفة. هنا تعدّلين ما يخص التطبيق فقط.</p>
           {page?.web_url && (
@@ -106,7 +106,7 @@ export default function RecipeEditor({ id }: { id: string | null }) {
       )}
 
       {newPage && (
-        <fieldset className="flex flex-col gap-2 rounded-2xl border border-line p-4">
+        <fieldset className="flex flex-col gap-2 p-4 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
           <legend className="px-1 font-semibold">أين تكتبين الوصفة؟</legend>
           <Choice checked={blank} onChange={() => setBlank(true)} title="أنشئ صفحة فارغة في OneNote" hint={`صفحة جديدة في «${libraryLabel(library!)}» بالعنوان والقالب (المصدر، المقادير، الطريقة، ملاحظاتي)، تكملينها في OneNote.`} />
           <Choice checked={!blank} onChange={() => setBlank(false)} title="اكتبيها هنا" hint="تكتبين الوصفة في النموذج، ويُنشئ التطبيق صفحتها في OneNote مرة واحدة. بعدها تُعدّل في OneNote." />
@@ -155,7 +155,7 @@ export default function RecipeEditor({ id }: { id: string | null }) {
         </>
       )}
 
-      <fieldset className="flex flex-col gap-4 rounded-2xl border border-line p-4">
+      <fieldset className="flex flex-col gap-4 p-4 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
         <legend className="px-1 font-semibold">للتخطيط (اختياري)</legend>
         <div className="flex flex-wrap gap-2">
           {MEAL_TYPES.map((type) => {
@@ -237,7 +237,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 function TextArea({ label, hint, rows, value, onChange, ltrPlaceholder }: { label: string; hint: string; rows: number; value: string; onChange: (v: string) => void; ltrPlaceholder?: string }) {
   return (
     <Field label={label} hint={hint}>
-      <textarea dir="auto" rows={rows} value={value} placeholder={ltrPlaceholder} onChange={(e) => onChange(e.target.value)} className="w-full rounded-xl border border-line bg-bg p-3 leading-relaxed" />
+      <textarea dir="auto" rows={rows} value={value} placeholder={ltrPlaceholder} onChange={(e) => onChange(e.target.value)} className="w-full border border-line bg-bg p-3 leading-relaxed rounded-2xl" />
     </Field>
   )
 }

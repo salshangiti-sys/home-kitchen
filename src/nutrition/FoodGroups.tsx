@@ -49,7 +49,7 @@ export default function FoodGroups({ recipeId, canEdit, api = real }: { recipeId
   }
 
   return (
-    <section aria-label="العناصر الغذائية" className="rounded-2xl border border-line bg-surface p-5">
+    <section aria-label="العناصر الغذائية" className="bg-surface p-5 rounded-3xl shadow-sm ring-1 ring-line">
       <h3 className="mb-1 text-lg font-semibold">العناصر الغذائية</h3>
       {canEdit ? (
         <>

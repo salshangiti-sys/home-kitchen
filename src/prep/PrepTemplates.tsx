@@ -65,7 +65,7 @@ export default function PrepTemplates({ recipeId, canEdit, ingredientLines, api 
   }
 
   return (
-    <section aria-label="تجهيزات الوصفة" className="rounded-2xl border border-line bg-surface p-5">
+    <section aria-label="تجهيزات الوصفة" className="bg-surface p-5 rounded-3xl shadow-sm ring-1 ring-line">
       <h3 className="mb-1 text-lg font-semibold">تجهيزات الوصفة</h3>
       <p className="mb-3 text-sm text-muted">ما يلزم قبل الطبخ (إذابة، غسل وتقطيع، تتبيلة…). تتحول إلى مهام لكل وجبة تضعينها في الخطة.</p>
 
@@ -79,7 +79,7 @@ export default function PrepTemplates({ recipeId, canEdit, ingredientLines, api 
                 <TemplateForm initial={t} busy={busy} submitLabel="احفظي التعديل" onSubmit={(input) => run(() => api.saveTemplate(t.id, recipeId, input))} onCancel={() => setEditing(null)} />
               </li>
             ) : (
-              <li key={t.id} className="flex flex-col gap-1 rounded-xl border border-line p-3">
+              <li key={t.id} className="flex flex-col gap-1 p-3 rounded-2xl bg-surface ring-1 ring-line">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone="accent">{KIND_LABELS[t.kind]}</Badge>
                   <Badge>{t.timing === 'at_time' ? `الساعة ${shortTime(t.at_time)}` : TIMING_LABELS[t.timing]}</Badge>
@@ -146,7 +146,7 @@ function TemplateForm({ initial, busy, submitLabel, onSubmit, onCancel }: { init
 
   return (
     <form
-      className="mt-3 flex flex-col gap-3 rounded-xl border border-line p-3"
+      className="mt-3 flex flex-col gap-3 p-3 rounded-2xl bg-surface ring-1 ring-line"
       onSubmit={(e) => {
         e.preventDefault()
         if (ready) onSubmit({ kind, timing, atTime: timing === 'at_time' ? time : null, body })
@@ -154,25 +154,25 @@ function TemplateForm({ initial, busy, submitLabel, onSubmit, onCancel }: { init
     >
       <label className="flex flex-col gap-1 text-sm font-medium">
         النوع
-        <select value={kind} onChange={(e) => setKind(e.target.value as PrepKind)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+        <select value={kind} onChange={(e) => setKind(e.target.value as PrepKind)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
           {KINDS.map((k) => <option key={k} value={k}>{KIND_LABELS[k]}</option>)}
         </select>
       </label>
       <label className="flex flex-col gap-1 text-sm font-medium">
         التوقيت
-        <select value={timing} onChange={(e) => setTiming(e.target.value as PrepTiming)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+        <select value={timing} onChange={(e) => setTiming(e.target.value as PrepTiming)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
           {TIMINGS.map((t) => <option key={t} value={t}>{TIMING_LABELS[t]}</option>)}
         </select>
       </label>
       {timing === 'at_time' && (
         <label className="flex flex-col gap-1 text-sm font-medium">
           الساعة
-          <input type="time" required value={time} onChange={(e) => setTime(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+          <input type="time" required value={time} onChange={(e) => setTime(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
         </label>
       )}
       <label className="flex flex-col gap-1 text-sm font-medium">
         ماذا تفعلين؟
-        <input dir="auto" maxLength={200} value={body} onChange={(e) => setBody(e.target.value)} placeholder="مثال: أخرجي الدجاج من الفريزر" className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+        <input dir="auto" maxLength={200} value={body} onChange={(e) => setBody(e.target.value)} placeholder="مثال: أخرجي الدجاج من الفريزر" className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
       </label>
       <div className="flex gap-2">
         <Button type="submit" disabled={busy || !ready}>{submitLabel}</Button>

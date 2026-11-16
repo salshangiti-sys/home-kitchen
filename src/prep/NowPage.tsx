@@ -212,7 +212,7 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
       </section>
 
       {freezer.length > 0 && [...groups.overdue, ...groups.today].some((t) => t.kind === 'defrost' && !t.done_at) && (
-        <section aria-label="في الفريزر" className="flex flex-col gap-2 rounded-2xl border border-line p-3">
+        <section aria-label="في الفريزر" className="flex flex-col gap-2 p-3 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
           <h3 className="text-lg font-semibold">في الفريزر</h3>
           <p className="text-sm text-muted">عندكِ مهمة إخراج من الفريزر. هذا ما عندكِ فيه:</p>
           <ul className="flex flex-col gap-2">
@@ -228,21 +228,21 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
       )}
 
       {tomorrowMeals.length > 0 && (
-        <details className="rounded-2xl border border-line p-3">
+        <details className="p-3 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
           <summary className="cursor-pointer font-medium">وجبات الغد ({tomorrowMeals.length})</summary>
           <ul className="mt-2 flex flex-col gap-2">{tomorrowMeals.map((meal) => <MealItem key={meal.id} meal={meal} />)}</ul>
         </details>
       )}
 
       {groups.tomorrow.length > 0 && (
-        <details className="rounded-2xl border border-line p-3">
+        <details className="p-3 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
           <summary className="cursor-pointer font-medium">غدًا ({groups.tomorrow.length})</summary>
           <ul className="mt-2 flex flex-col gap-2">{groups.tomorrow.map(row)}</ul>
         </details>
       )}
 
       {groups.doneToday.length > 0 && (
-        <details className="rounded-2xl border border-line p-3">
+        <details className="p-3 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
           <summary className="cursor-pointer font-medium">أُنجز اليوم ({groups.doneToday.length})</summary>
           <ul className="mt-2 flex flex-col gap-2">{groups.doneToday.map(row)}</ul>
         </details>
@@ -259,7 +259,7 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
 // A meal planned for today or tomorrow: its slot, its title (a link to the recipe) and servings.
 function MealItem({ meal }: { meal: DayMeal }) {
   return (
-    <li className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface p-3">
+    <li className="flex flex-wrap items-center gap-2 bg-surface p-3 rounded-2xl ring-1 ring-line">
       {meal.slot && <Badge tone="accent">{meal.slot}</Badge>}
       {meal.recipe_id ? (
         <a href={href.recipe(meal.recipe_id)} dir="auto" className="font-medium text-accent underline">{meal.title}</a>
@@ -296,7 +296,7 @@ function TaskRow({ task, meal, canEdit, busy, editing, confirming, unsent, onTic
     )
   }
   return (
-    <li className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-3">
+    <li className="flex flex-col gap-2 bg-surface p-3 rounded-2xl ring-1 ring-line">
       <label className="flex min-h-11 cursor-pointer items-start gap-3">
         <input type="checkbox" checked={done} disabled={busy} onChange={(e) => onTick(e.target.checked)} className="mt-1 size-6 shrink-0 accent-[var(--accent)]" />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -344,22 +344,22 @@ function TaskForm({ initial, busy, submitLabel, onSubmit, onCancel }: { initial:
     >
       <label className="flex flex-col gap-1 text-sm font-medium">
         ماذا تفعلين؟
-        <input dir="auto" maxLength={200} value={body} onChange={(e) => setBody(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+        <input dir="auto" maxLength={200} value={body} onChange={(e) => setBody(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
       </label>
       <label className="flex flex-col gap-1 text-sm font-medium">
         اليوم
-        <input type="date" required value={day} onChange={(e) => setDay(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+        <input type="date" required value={day} onChange={(e) => setDay(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
       </label>
       <label className="flex flex-col gap-1 text-sm font-medium">
         التوقيت
-        <select value={timing} onChange={(e) => setTiming(e.target.value as PrepTiming)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+        <select value={timing} onChange={(e) => setTiming(e.target.value as PrepTiming)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
           {TIMINGS.map((t) => <option key={t} value={t}>{TIMING_LABELS[t]}</option>)}
         </select>
       </label>
       {timing === 'at_time' && (
         <label className="flex flex-col gap-1 text-sm font-medium">
           الساعة
-          <input type="time" required value={time} onChange={(e) => setTime(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+          <input type="time" required value={time} onChange={(e) => setTime(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
         </label>
       )}
       <div className="flex gap-2">

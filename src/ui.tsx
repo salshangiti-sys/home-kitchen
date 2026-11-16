@@ -1,6 +1,7 @@
 // Small shared building blocks for the screens.
 
 import type { ReactNode } from 'react'
+import { tintFor } from './tints'
 
 export function Card({ title, children, actions }: { title?: ReactNode; children: ReactNode; actions?: ReactNode }) {
   return (
@@ -52,7 +53,9 @@ export function LinkButton({ href, children, kind = 'plain', external }: { href:
   )
 }
 
-export function Badge({ children, tone = 'plain' }: { children: ReactNode; tone?: 'plain' | 'warn' | 'accent' }) {
+// `tint` names a section or tag: it then gets that name's own soft colour, the same everywhere.
+export function Badge({ children, tone = 'plain', tint }: { children: ReactNode; tone?: 'plain' | 'warn' | 'accent'; tint?: string }) {
+  if (tint) return <span dir="auto" className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tintFor(tint)}`}>{children}</span>
   const look =
     tone === 'warn'
       ? 'border-amber-500 text-amber-800 dark:text-amber-300'

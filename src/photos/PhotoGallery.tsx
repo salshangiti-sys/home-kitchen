@@ -109,7 +109,7 @@ export default function PhotoGallery({ recipeId, title, canEdit, api = real }: {
     <section aria-label="صور الوصفة" className="flex flex-col gap-3">
       {list.length > 0 && (
         <>
-          <button type="button" onClick={() => setOpen(0)} className="overflow-hidden rounded-2xl border border-line bg-surface" aria-label="تكبير الصورة الرئيسية">
+          <button type="button" onClick={() => setOpen(0)} className="overflow-hidden bg-surface rounded-3xl shadow-sm ring-1 ring-line" aria-label="تكبير الصورة الرئيسية">
             <img
               src={urls.get(list[0].path)}
               alt={`صورة ${title}`}
@@ -123,7 +123,7 @@ export default function PhotoGallery({ recipeId, title, canEdit, api = real }: {
             <ul className="flex gap-2 overflow-x-auto pb-1">
               {list.slice(1).map((photo, i) => (
                 <li key={photo.id} className="shrink-0">
-                  <button type="button" onClick={() => setOpen(i + 1)} aria-label={`تكبير الصورة ${i + 2}`} className="overflow-hidden rounded-xl border border-line">
+                  <button type="button" onClick={() => setOpen(i + 1)} aria-label={`تكبير الصورة ${i + 2}`} className="overflow-hidden rounded-2xl bg-surface ring-1 ring-line">
                     <img src={urls.get(photo.thumb_path)} alt="" onError={refreshOnError} className="size-20 object-cover" />
                   </button>
                 </li>

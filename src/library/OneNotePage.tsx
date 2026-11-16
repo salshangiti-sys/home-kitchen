@@ -248,7 +248,7 @@ function UnlinkedRow({ page, recipes, busy, act }: { page: UnlinkedPage; recipes
       </div>
       {linking && (
         <div className="flex flex-wrap gap-2">
-          <select value={target} onChange={(e) => setTarget(e.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-line bg-bg px-3">
+          <select value={target} onChange={(e) => setTarget(e.target.value)} className="min-h-11 min-w-0 flex-1 border border-line bg-bg px-3 rounded-2xl">
             <option value="">اختاري الوصفة…</option>
             {recipes.map((r) => (
               <option key={r.id} value={r.id}>{r.title} · {r.section}</option>

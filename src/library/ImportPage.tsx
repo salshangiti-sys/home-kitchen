@@ -73,7 +73,7 @@ export default function ImportPage() {
 
       <Card title="1. اختيار الملف">
         <p className="mb-3 text-sm text-muted">ملف recipes.json المصدَّر من OneNote. يُفحص هنا في المتصفح أولًا، ولا يُحفظ شيء حتى الخطوة الثالثة.</p>
-        <label className="inline-flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-line px-4 text-sm font-medium">
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-3 border border-line px-4 text-sm font-medium rounded-2xl">
           اختاري ملف الوصفات
           <input
             type="file"

@@ -79,7 +79,7 @@ export function SignIn() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="name@example.com"
-          className="min-h-11 rounded-xl border border-line bg-bg px-3"
+          className="min-h-11 border border-line bg-bg px-3 rounded-2xl"
         />
         <Button onClick={send} disabled={!email || state === 'sending'}>
           أرسل رابط الدخول

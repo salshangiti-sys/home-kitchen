@@ -124,7 +124,7 @@ export default function DictionaryPage({ canEdit, api = real, onChanged }: Props
           <h3 className="text-lg font-semibold">ما علّمتِه ({lessons.length})</h3>
           <ul className="flex flex-col gap-2">
             {lessons.map((l) => (
-              <li key={l.name_key} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface p-3">
+              <li key={l.name_key} className="flex flex-wrap items-center justify-between gap-2 bg-surface p-3 rounded-2xl ring-1 ring-line">
                 <span dir="auto">
                   <strong>{l.name_key}</strong> <span className="text-muted">← {l.target ? `نفس «${l.target}»` : `صنف مستقل (${AISLE_CHOICES.find((a) => a.aisle === l.aisle)?.label})`}</span>
                 </span>
@@ -141,14 +141,14 @@ export default function DictionaryPage({ canEdit, api = real, onChanged }: Props
 function UnknownRow({ item, canEdit, busy, onSave }: { item: { key: string; label: string; recipes: number; example: string }; canEdit: boolean; busy: boolean; onSave: (choice: string) => void }) {
   const [choice, setChoice] = useState('')
   return (
-    <li className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-3">
+    <li className="flex flex-col gap-2 bg-surface p-3 rounded-2xl ring-1 ring-line">
       <span dir="auto" className="font-medium">{item.label}</span>
       <span dir="auto" className="text-sm text-muted">في {item.recipes === 1 ? 'وصفة واحدة' : `${item.recipes} وصفات`} · مثل: {item.example}</span>
       {canEdit && (
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-medium">
             هذا الاسم
-            <select value={choice} onChange={(e) => setChoice(e.target.value)} aria-label={`تعليم ${item.label}`} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+            <select value={choice} onChange={(e) => setChoice(e.target.value)} aria-label={`تعليم ${item.label}`} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
               <option value="">اختاري…</option>
               <optgroup label="نفس صنف يعرفه التطبيق">
                 {SAME_AS.map((s) => (

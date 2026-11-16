@@ -96,7 +96,7 @@ export function InstallHint() {
 
   if (hidden || (!prompt && !isIPhone())) return null
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4 text-sm">
+    <div className="flex flex-col gap-2 bg-surface p-4 text-sm rounded-3xl shadow-sm ring-1 ring-line">
       <p className="font-medium">ضعي التطبيق على الشاشة الرئيسية ليفتح كتطبيق، حتى دون إنترنت.</p>
       {prompt ? (
         <div className="flex gap-2">

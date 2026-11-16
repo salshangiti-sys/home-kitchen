@@ -45,7 +45,7 @@ export default function TrashPage() {
       ) : (
         <ul className="flex flex-col gap-2">
           {items.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-line bg-surface px-4 py-3">
+            <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 bg-surface px-4 py-3 rounded-3xl shadow-sm ring-1 ring-line">
               <a href={href.recipe(item.id)} className="flex min-w-0 flex-col">
                 <span dir="auto" className="truncate font-medium">{item.title}</span>
                 <span dir="auto" className="text-sm text-muted">{item.section} · حُذفت {new Date(item.deleted_at).toLocaleDateString('ar-SA', { day: 'numeric', month: 'long' })}</span>

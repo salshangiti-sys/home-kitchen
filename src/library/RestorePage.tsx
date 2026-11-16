@@ -70,7 +70,7 @@ export default function RestorePage({ api = { restoreFromBackup } }: { api?: Api
 
       <Card title="1. اختيار الملف">
         <p className="mb-3 text-sm text-muted">ملف hk-backup-….json من OneDrive › Apps › home-kitchen. يُقرأ هنا في المتصفح أولًا.</p>
-        <label className="inline-flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-line px-4 text-sm font-medium">
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-3 border border-line px-4 text-sm font-medium rounded-2xl">
           اختاري ملف النسخة
           <input type="file" accept="application/json,.json" className="sr-only" onChange={(e) => e.target.files?.[0] && void readFile(e.target.files[0])} />
         </label>

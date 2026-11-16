@@ -132,12 +132,12 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         <a href={href.library} className="text-sm text-accent">→ كل الوصفات</a>
         <h2 dir="auto" className="text-2xl font-bold leading-snug">{doc.title}</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>{doc.category.section}</Badge>
+          <Badge tint={doc.category.section}>{doc.category.section}</Badge>
           {doc.status !== 'complete' && <Badge tone={doc.status === 'partial' ? 'warn' : 'plain'}>{STATUS_LABELS[doc.status]}</Badge>}
           {doc.tags?.meal_types?.map((type) => <Badge key={type} tone="accent">{MEAL_TYPE_LABELS[type]}</Badge>)}
           {doc.tags?.kid_friendly && <Badge tone="accent">مناسبة للأطفال</Badge>}
           {doc.tags?.lunchbox && <Badge tone="accent">لانش بوكس</Badge>}
-          {doc.tags?.custom?.map((tag) => <Badge key={tag}>{tag}</Badge>)}
+          {doc.tags?.custom?.map((tag) => <Badge key={tag} tint={tag}>{tag}</Badge>)}
         </div>
         {inTrash && (
           <div className="flex flex-col gap-2 rounded-2xl border border-amber-500 p-4">
@@ -159,7 +159,7 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
           {canEdit && !inTrash && !confirming && <Button kind="plain" onClick={() => setConfirming(true)}>نقل إلى سلة المحذوفات</Button>}
         </div>
         {canEdit && !inTrash && confirming && (
-          <div className="flex flex-col gap-2 rounded-2xl border border-line p-4">
+          <div className="flex flex-col gap-2 p-4 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
             <p>تُنقل الوصفة إلى سلة المحذوفات ويمكنك استرجاعها منها في أي وقت. صفحتها في OneNote لا تتأثر.</p>
             <div className="flex gap-2">
               <Button kind="danger" disabled={moving} onClick={() => move(() => trashRecipe(id), () => navigate(href.library))}>
@@ -273,7 +273,7 @@ function PageStatus({ page, reading }: { page: PageLink; reading: boolean }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-line bg-surface p-5">
+    <section className="bg-surface p-5 rounded-3xl shadow-sm ring-1 ring-line">
       <h3 className="mb-3 text-lg font-semibold">{title}</h3>
       {children}
     </section>
@@ -291,7 +291,7 @@ function Facts({ doc }: { doc: RecipeDoc }) {
 
 function LinkOnly({ doc }: { doc: RecipeDoc }) {
   return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
+    <section className="flex flex-col gap-3 bg-surface p-5 rounded-3xl shadow-sm ring-1 ring-line">
       <p className="text-muted">وصفة محفوظة كرابط فقط. افتح الرابط لمشاهدتها:</p>
       {doc.sources.map((source, i) => {
         const link = safeHref(source.url)
@@ -301,7 +301,7 @@ function LinkOnly({ doc }: { doc: RecipeDoc }) {
             <span className="shrink-0">{PLATFORM_LABELS[source.platform ?? 'other']} ↗</span>
           </a>
         ) : (
-          <p key={i} dir="auto" className="break-all rounded-xl border border-line px-4 py-3">{source.label || source.url}</p>
+          <p key={i} dir="auto" className="break-all px-4 py-3 rounded-2xl bg-surface ring-1 ring-line">{source.label || source.url}</p>
         )
       })}
     </section>

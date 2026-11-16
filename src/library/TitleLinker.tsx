@@ -39,7 +39,7 @@ export default function TitleLinker({ onLinked, link = linkPagesByTitle }: { onL
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-line p-4" role="group" aria-label="معاينة الربط بالعنوان">
+    <div className="flex flex-col gap-3 p-4 rounded-3xl bg-surface shadow-sm ring-1 ring-line" role="group" aria-label="معاينة الربط بالعنوان">
       <p className="font-medium">سيُربط {preview.linked} {preview.linked === 1 ? 'وصفة' : 'وصفة'} بصفحة لها العنوان نفسه.</p>
       <ul className="flex flex-col gap-1 text-sm text-muted">
         <li>{preview.pages_without_recipe} صفحة في الدفتر ليست لها وصفة في التطبيق.</li>
