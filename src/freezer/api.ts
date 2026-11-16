@@ -24,7 +24,7 @@ export interface FreezerInput {
   note: string | null
 }
 
-export const UNITS = ['قطعة', 'كيس', 'علبة', 'كرة', 'حبة', 'كجم', 'غ', 'حصة']
+export const UNITS = ['قطعة', 'كيس', 'علبة', 'كرة', 'حبة', 'لفة', 'قرص', 'كجم', 'غ', 'حصة']
 
 export const loadFreezer = (): Promise<FreezerItem[]> =>
   readThrough('freezer', async () => {
