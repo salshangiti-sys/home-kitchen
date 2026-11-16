@@ -14,6 +14,10 @@ describe('tags from the title and the lines', () => {
     expect(tagsFor(input('شاورما', ['١ كجم صدور دجاج شرائح']))).toEqual(['دجاج', 'صدور دجاج'])
     expect(tagsFor(input('إيدام', ['دجاج مقطع', 'صدر الخروف']))).toEqual(['دجاج'])
   })
+  it('a snack tag only when the title says so', () => {
+    expect(tagsFor(input('سمبوسة جبنة', ['جبنة']))).toEqual(['سناك/خفايف'])
+    expect(tagsFor(input('كبسة', ['رز']))).toEqual([])
+  })
   it('plain meat when it does not say which kind, kofta apart', () => {
     expect(tagsFor(input('كبسة حمراء', ['بصل', 'لحم', 'رز']))).toEqual(['لحم'])
     expect(tagsFor(input('صينية كفتة بالخضار', ['كفتة', 'بصل']))).toEqual(['كفتة'])

@@ -36,6 +36,7 @@ const ANY_MEAT = new RegExp(`(^|[^ء-ي])(ال)?لحم`)
 const TUNA = /(تونا|تونة|تونه)/
 const SHRIMP = /(روبيان|قمبري|جمبري)/
 const FISH = new RegExp(`(^|[^ء-ي])(ال)?(سمك|سمكة|سلمون|سالمون|هامور)(?!${L})`)
+const SNACK_TITLE = /(سناك|خفايف|سمبوسة|سمبوسه)/
 const QUICK = /(سريع|اسرع|أسرع|سريعة)/
 
 // The ingredient evidence: the title and the lines, or the title and the page text when there are no lines.
@@ -60,6 +61,7 @@ export function tagsFor(input: AutofillInput): string[] {
   if (has(t, SHRIMP)) tags.push('روبيان')
   if (has(t, FISH)) tags.push('سمك')
   if (has(`${input.title} ${input.text}`.toLowerCase(), QUICK)) tags.push('سريع')
+  if (has(input.title, SNACK_TITLE)) tags.push('سناك/خفايف')
   return tags
 }
 
