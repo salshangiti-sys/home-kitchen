@@ -8,6 +8,8 @@ import { Badge, Button, Notice } from '../ui'
 import { enqueue, pending, subscribe, type Op } from '../offline/outbox'
 import { deviceOffline, looksOffline } from '../offline/readThrough'
 import { dayLabel, todayIso, weekdayName } from '../plan/dates'
+import { loadFreezer, useFreezerItem, type FreezerItem } from '../freezer/api'
+import { quantityText } from '../freezer/model'
 import {
   KIND_LABELS,
   TIMINGS,
@@ -35,6 +37,8 @@ import {
 export interface NowApi {
   loadNow: typeof loadNow
   loadMeals?: typeof loadMealsOn // today's and tomorrow's meals (best effort)
+  loadFreezer?: typeof loadFreezer // what is in the freezer, shown beside a task that takes something out of it (best effort)
+  useFreezerItem?: typeof useFreezerItem
   generateTasks: typeof generateTasks
   setDone: typeof setDone
   addTask: typeof addTask
@@ -42,7 +46,7 @@ export interface NowApi {
   dismissTask: typeof dismissTask
 }
 
-const real: NowApi = { loadNow, loadMeals: loadMealsOn, generateTasks, setDone, addTask, updateTask, dismissTask }
+const real: NowApi = { loadNow, loadMeals: loadMealsOn, loadFreezer, useFreezerItem, generateTasks, setDone, addTask, updateTask, dismissTask }
 
 // Where changes made with no connection wait (the app's own outbox unless a test brings another).
 export interface Outbox {
@@ -63,6 +67,7 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
   const now = today()
   const [data, setData] = useState<NowData | null>(null)
   const [meals, setMeals] = useState<DayMeal[]>([])
+  const [freezer, setFreezer] = useState<FreezerItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<string | 'new' | null>(null)
@@ -89,6 +94,7 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
       }
       await show(await api.loadNow(now))
       setMeals((await api.loadMeals?.(now).catch(() => undefined)) ?? [])
+      setFreezer((await api.loadFreezer?.().catch(() => undefined)) ?? [])
     } catch (e) {
       setData((current) => current)
       setError(prepMessage(e))
@@ -110,6 +116,20 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
       setEditing(null)
       setConfirming(null)
       await show(await api.loadNow(now))
+    } catch (e) {
+      setError(prepMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // «استعملت» on an item in the freezer card: one off, then the card shows what is left.
+  const useOne = async (item: FreezerItem) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.useFreezerItem?.(item.id)
+      setFreezer((await api.loadFreezer?.().catch(() => undefined)) ?? [])
     } catch (e) {
       setError(prepMessage(e))
     } finally {
@@ -190,6 +210,22 @@ export default function NowPage({ canEdit, today = todayIso, api = real, outbox 
         {groups.today.length > 0 ? <ul className="flex flex-col gap-2">{groups.today.map(row)}</ul> : <p className="text-sm text-muted">{nothing ? 'لا مهام تجهيز اليوم.' : 'أنجزتِ كل مهام اليوم.'}</p>}
         {nothing && todayMeals.some((m) => m.recipe_id) && <p className="text-sm text-muted">تُضاف مهام التجهيز (إذابة، تتبيل…) من «التجهيز» في صفحة كل وصفة، فتظهر هنا حين تكون الوصفة في الخطة.</p>}
       </section>
+
+      {freezer.length > 0 && [...groups.overdue, ...groups.today].some((t) => t.kind === 'defrost' && !t.done_at) && (
+        <section aria-label="في الفريزر" className="flex flex-col gap-2 rounded-2xl border border-line p-3">
+          <h3 className="text-lg font-semibold">في الفريزر</h3>
+          <p className="text-sm text-muted">عندكِ مهمة إخراج من الفريزر. هذا ما عندكِ فيه:</p>
+          <ul className="flex flex-col gap-2">
+            {freezer.map((item) => (
+              <li key={item.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span dir="auto">{item.name} <span className="text-muted">× {quantityText(item.quantity, item.unit)}</span></span>
+                {canEdit && api.useFreezerItem && <Button kind="plain" disabled={busy} onClick={() => void useOne(item)}>استعملت</Button>}
+              </li>
+            ))}
+          </ul>
+          <a href={href.freezer} className="text-sm underline">افتحي الفريزر</a>
+        </section>
+      )}
 
       {tomorrowMeals.length > 0 && (
         <details className="rounded-2xl border border-line p-3">

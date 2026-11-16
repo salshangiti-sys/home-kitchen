@@ -9,6 +9,8 @@ import { href } from '../router'
 import { Badge, Button, LinkButton, Notice } from '../ui'
 import { enqueue, flush, pending, subscribe, type Op } from '../offline/outbox'
 import * as plan from '../plan/api'
+import { loadFreezer, type FreezerItem } from '../freezer/api'
+import { inFreezer, summary } from '../freezer/model'
 import { addDays, isIsoDate, todayIso, weekRange } from '../plan/dates'
 import { loadShopping, shoppingMessage, type ShoppingData } from './api'
 import { ADD_KIND, CLEAR_KIND, CONFIRM_KIND, MARK_KIND, PANTRY_KIND, UNCONFIRM_KIND, buildShoppingList, confirmKey, keyOf, markKey, overlayConfirmations, overlayMarks, pantryKey, plannedRecipes, type Item, type ItemSource, type MarkStatus } from './model'
@@ -18,9 +20,10 @@ import { UNITS, formatQuantity, formatTotals, parseAmount, type Quantity, type U
 export interface ShoppingApi {
   loadWeek: typeof plan.loadWeek
   loadShopping: typeof loadShopping
+  loadFreezer?: typeof loadFreezer // what is in the freezer, noted beside an item she has some of (best effort)
 }
 
-const realApi: ShoppingApi = { loadWeek: plan.loadWeek, loadShopping }
+const realApi: ShoppingApi = { loadWeek: plan.loadWeek, loadShopping, loadFreezer }
 
 export interface Outbox {
   enqueue: (kind: string, key: string, args: Record<string, unknown>) => Promise<void>
@@ -46,6 +49,7 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState('')
+  const [freezer, setFreezer] = useState<FreezerItem[]>([])
   const lessons = useLessonsVersion() // the list is worked out again when she teaches the dictionary
   const recipesRef = useRef<Array<{ id: string; title: string }>>([])
 
@@ -57,6 +61,7 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
       const shop = await api.loadShopping(data.weekStart, recipes)
       setWeekData(data)
       setBase(shop)
+      setFreezer((await api.loadFreezer?.().catch(() => undefined)) ?? [])
       setOps(await outbox.pending())
       setError(null)
     } catch (e) {
@@ -147,6 +152,10 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
               {have && <Badge tone="accent">{item.pantry ? 'دائمًا في البيت' : 'متوفر في البيت'}</Badge>}
               {item.manual && <Badge>أضفتِه بيدك</Badge>}
               {waiting.has(item.key) && <Badge tone="warn">لم تُرسل بعد</Badge>}
+              {(() => {
+                const home = inFreezer(freezer, item.label)
+                return home.length > 0 ? <Badge tone="accent">في الفريزر: {summary(home)}</Badge> : null
+              })()}
               {item.sources.length > 0 && <span dir="auto">{[...new Set(item.sources.map((s) => s.recipe))].join('، ')}</span>}
             </span>
             {item.totals.length > 0 && (

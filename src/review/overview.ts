@@ -5,6 +5,7 @@
 import { supabase } from '../lib/supabase'
 import { readThrough } from '../offline/readThrough'
 import { usableIngredients, type Suggestion } from '../ingredients/api'
+import { inSection } from '../library/sections'
 import { FOOD_GROUPS, type FoodGroup } from '../nutrition/api'
 import { KIND_LABELS, TIMING_LABELS, type PrepKind, type PrepTiming } from '../prep/api'
 
@@ -181,7 +182,7 @@ export function filterRows(rows: OverviewRow[], f: Filters): OverviewRow[] {
   const q = norm(f.query)
   return rows.filter(
     (r) =>
-      (!f.section || r.section === f.section) &&
+      (!f.section || inSection(r.section, f.section)) &&
       (!f.problem || r.problems.includes(f.problem)) &&
       (!f.tag || r.tags.includes(f.tag)) &&
       (!q || norm(r.title).includes(q) || r.tags.some((t) => norm(t).includes(q))),

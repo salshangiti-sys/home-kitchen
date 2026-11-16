@@ -9,6 +9,7 @@ import { coverThumbs } from '../photos/api'
 import { listCookStats, localDate, type CookStat } from '../history/api'
 import { SORT_LABELS, cookLine, sortRecipes, type SortMode } from '../history/stats'
 import { matchesQuery, normalizeAr } from './normalize'
+import { SECTION_SEPARATOR, inSection, sectionsOf, subsectionsOf } from './sections'
 import { PROTEINS, PROTEIN_LABELS, loadIngredientLines, mainIngredients, type Protein } from './mainIngredient'
 import BulkTagPanel from './BulkTagPanel'
 import { useLessonsVersion } from '../shopping/LessonsContext'
@@ -22,6 +23,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [section, setSection] = useState<string | null>(null)
+  const [sub, setSub] = useState<string | null>(null) // a sub-section of the big section chosen
   const [status, setStatus] = useState<RecipeStatus | null>(null)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [onlyFlagged, setOnlyFlagged] = useState(false)
@@ -51,11 +53,8 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
     loadIngredientLines().then(setLines, () => undefined) // only for finding recipes by chicken / meat / fish
   }, [canEdit])
 
-  const sections = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const r of data?.recipes ?? []) counts.set(r.section, (counts.get(r.section) ?? 0) + 1)
-    return [...counts].sort((a, b) => a[0].localeCompare(b[0], 'ar'))
-  }, [data])
+  const sections = useMemo(() => sectionsOf(data?.recipes ?? []), [data])
+  const subsections = useMemo(() => (section ? subsectionsOf(data?.recipes ?? [], section) : []), [data, section])
 
   // chicken / meat / fish per recipe, from its ingredient lines and title (a search aid only)
   const proteins = useMemo(() => new Map((data?.recipes ?? []).map((r) => [r.id, mainIngredients(r.title, lines?.[r.id] ?? [])])), [data, lines, lessons]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -70,7 +69,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
     if (!data) return []
     const matching = data.recipes.filter(
       (r) =>
-        (!section || r.section === section) &&
+        (!section || (sub ? r.section === `${section}${SECTION_SEPARATOR}${sub}` : inSection(r.section, section))) &&
         (!status || r.status === status) &&
         (!onlyFavorites || data.favorites.has(r.id)) &&
         (!onlyFlagged || data.openFlags.has(r.id)) &&
@@ -80,7 +79,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
         matchesQuery(r.search_norm || normalizeAr(r.title), query),
     )
     return sortRecipes(matching, stats ?? new Map(), sort)
-  }, [data, query, section, status, onlyFavorites, onlyFlagged, onlyNeverCooked, protein, tag, proteins, stats, sort])
+  }, [data, query, section, sub, status, onlyFavorites, onlyFlagged, onlyNeverCooked, protein, tag, proteins, stats, sort])
   const neverCooked = useMemo(() => (stats && data ? data.recipes.filter((r) => !stats.has(r.id)).length : 0), [stats, data])
   const today = localDate()
 
@@ -131,15 +130,28 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
       />
 
       <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="الأقسام">
-        <button type="button" className={chip(section === null)} onClick={() => setSection(null)}>
+        <button type="button" className={chip(section === null)} onClick={() => { setSection(null); setSub(null) }}>
           الكل ({data.recipes.length})
         </button>
         {sections.map(([name, count]) => (
-          <button key={name} type="button" dir="auto" className={`${chip(section === name)} shrink-0`} onClick={() => setSection(section === name ? null : name)}>
+          <button key={name} type="button" dir="auto" className={`${chip(section === name)} shrink-0`} onClick={() => { setSection(section === name ? null : name); setSub(null) }}>
             {name} ({count})
           </button>
         ))}
       </div>
+
+      {subsections.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="الأقسام الفرعية">
+          <button type="button" className={chip(sub === null)} onClick={() => setSub(null)}>
+            كل {section}
+          </button>
+          {subsections.map(([name, count]) => (
+            <button key={name} type="button" dir="auto" className={`${chip(sub === name)} shrink-0`} onClick={() => setSub(sub === name ? null : name)}>
+              {name} ({count})
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 text-sm">
         <button type="button" className={chip(onlyFavorites)} onClick={() => setOnlyFavorites(!onlyFavorites)}>
