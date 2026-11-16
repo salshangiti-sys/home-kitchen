@@ -11,8 +11,12 @@ const FIELD = 'min-h-10 rounded-xl border border-line bg-bg px-3 text-sm'
 const SMALL = 'min-h-9 rounded-full border px-3 text-sm disabled:opacity-50'
 const MAX_TAG = 40
 
+// Tags she uses often, offered as one-tap chips so she does not type them on the phone.
+export const SUGGESTED_TAGS = ['دجاج', 'صدور دجاج', 'دجاج مفتفت', 'لحم مفروم', 'لحم كبير', 'كفتة', 'سريع', 'سناك/خفايف'] as const
+
 export function TagsEditor({ tags, busy, onChange }: { tags: string[]; busy: boolean; onChange: (tags: string[]) => void }) {
   const [draft, setDraft] = useState('')
+  const offered = SUGGESTED_TAGS.filter((s) => !tags.some((t) => t.toLowerCase() === s.toLowerCase()))
   const add = () => {
     const name = draft.trim()
     if (!name || name.length > MAX_TAG) return
@@ -46,6 +50,19 @@ export function TagsEditor({ tags, busy, onChange }: { tags: string[]; busy: boo
         onBlur={add}
         className={`${FIELD} w-28`}
       />
+      {offered.map((name) => (
+        <button
+          key={name}
+          type="button"
+          dir="auto"
+          aria-label={`أضيفي الوسم ${name}`}
+          disabled={busy}
+          onClick={() => onChange([...tags, name])}
+          className="min-h-9 rounded-full border border-dashed border-line px-3 text-sm text-muted disabled:opacity-50"
+        >
+          + {name}
+        </button>
+      ))}
     </div>
   )
 }
