@@ -41,6 +41,7 @@ const FLAG_LABELS: Record<string, string> = {
   title_mismatch: 'العنوان لا يطابق المحتوى',
   added_from_onenote: 'أُضيفت من صفحة في OneNote (تنتظر اعتمادكِ في «مراجعة»)',
   auto_filled: 'ملأ التطبيق وسومها وتجهيزاتها وعناصرها الغذائية تلقائيًا (تنتظر اعتمادكِ في «مراجعة»)',
+  draft_by_app: 'مسوّدة كتبها التطبيق: المقادير والخطوات تقديرية وتنتظر مراجعتكِ في «مراجعة»',
 }
 
 function describeFlag(flag: string): string {
