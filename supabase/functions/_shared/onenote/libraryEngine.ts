@@ -197,10 +197,13 @@ export interface CheckSummary {
 
 // Lists every page of the notebook. Linked pages that are not listed are checked one by one (a
 // page OneNote still returns stays linked); pages no recipe is linked to are kept for the owner's
-// review; then the recipes read longest ago are refreshed, a few per check to stay well inside
-// OneNote's request limits.
-export async function checkLibrary(deps: LibraryDeps, refreshLimit = 10): Promise<CheckSummary> {
+// review; then recipes are read again, a few per check to stay well inside OneNote's request limits
+// and the function's run time (reading one page takes 10-18 seconds, and a run that goes past about
+// 150 seconds is cut off): first the pages edited in OneNote since they were last read, then the
+// ones read longest ago. No new read starts after `budgetMs`.
+export async function checkLibrary(deps: LibraryDeps, refreshLimit = 5, budgetMs = 80_000, clock: () => number = Date.now): Promise<CheckSummary> {
   const { graph, store, now } = deps
+  const started = clock()
   const library = await requireLibrary(store)
   const fresh: Library = { ...library, sections: await placeSections(graph, library) }
   await store.saveLibrary(fresh)
@@ -229,18 +232,23 @@ export async function checkLibrary(deps: LibraryDeps, refreshLimit = 10): Promis
     .map((page) => ({ pageId: page.id, title: page.title, sectionId: page.sectionId, sectionName: sectionName(fresh, page.sectionId), webUrl: page.webUrl }))
   await store.replaceUnlinked(unlinked)
 
+  // Edited in OneNote after the app last read it (a page never read counts as edited).
+  const edited = (link: PageLink) => !link.lastReadAt || Date.parse(listed.get(link.pageId)!.lastModifiedDateTime) > Date.parse(link.lastReadAt)
   const stale = links
     .filter((link) => !missing.includes(link.recipeId) && listed.has(link.pageId))
-    .sort((a, b) => (a.lastReadAt ?? '').localeCompare(b.lastReadAt ?? ''))
+    .sort((a, b) => Number(edited(b)) - Number(edited(a)) || (a.lastReadAt ?? '').localeCompare(b.lastReadAt ?? ''))
     .slice(0, refreshLimit)
   let changed = 0
+  let refreshed = 0
   for (const link of stale) {
+    if (refreshed > 0 && clock() - started > budgetMs) break
     const outcome = await refreshRecipe(deps, link.recipeId)
+    refreshed += 1
     if (outcome.result === 'updated') changed += 1
   }
 
   await store.saveLibrary({ ...fresh, lastCheckedAt: now().toISOString() })
-  return { pages: pages.length, unlinked: unlinked.length, missing, refreshed: stale.length, changed }
+  return { pages: pages.length, unlinked: unlinked.length, missing, refreshed, changed }
 }
 
 async function pageInLibrary(deps: LibraryDeps, library: Library, pageId: string): Promise<{ meta: PageMeta; library: Library }> {
