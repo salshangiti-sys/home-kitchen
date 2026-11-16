@@ -1,17 +1,38 @@
 // «مراجعة»: all recipes in one list with their tags, ingredients, prep tasks and food groups, and the
 // recipes that are still missing something. For reading and checking; to change a recipe, open it.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { href } from '../router'
-import { Badge, LinkButton, Notice } from '../ui'
+import { Badge, Button, Card, LinkButton, Notice } from '../ui'
+import { addPageAsRecipe, checkNotebook, listUnlinked, loadLibrary, timeAgo, type CheckSummary, type UnlinkedPage } from '../library/onenote'
 import { sectionsOf } from '../library/sections'
 import { FOOD_GROUP_LABELS } from '../nutrition/api'
 import { PROBLEM_LABELS, buildOverview, filterRows, loadOverview, problemCounts, type OverviewData, type OverviewRow, type Problem } from './overview'
 
+export interface Pending {
+  pages: UnlinkedPage[]
+  checkedAt: string | null // when the notebook was last looked at
+}
+
 export interface OverviewApi {
   loadOverview: typeof loadOverview
+  loadPending: () => Promise<Pending>
+  approve: (pageId: string) => Promise<{ recipeId: string }>
+  checkNow: () => Promise<CheckSummary>
 }
-const real: OverviewApi = { loadOverview }
+const real: OverviewApi = {
+  loadOverview,
+  loadPending: async () => {
+    const [pages, library] = await Promise.all([listUnlinked(), loadLibrary()])
+    return { pages, checkedAt: library?.last_checked_at ?? null }
+  },
+  approve: addPageAsRecipe,
+  checkNow: checkNotebook,
+}
+
+// Tells the menu how many pages wait for approval, so its tab can show the number.
+export const PENDING_EVENT = 'pending-pages'
+const announce = (count: number) => window.dispatchEvent(new CustomEvent(PENDING_EVENT, { detail: count }))
 
 const chip = (active: boolean) => `min-h-9 shrink-0 rounded-full border px-3 text-sm ${active ? 'border-accent bg-accent text-on-accent' : 'border-line text-ink'}`
 
@@ -72,23 +93,44 @@ function Row({ row, open }: { row: OverviewRow; open: boolean }) {
 
 export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: OverviewApi }) {
   const [data, setData] = useState<OverviewData | null>(null)
+  const [pending, setPending] = useState<Pending | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [note, setNote] = useState<{ text: string; recipeId?: string } | null>(null)
+  const [busy, setBusy] = useState(false)
   const [query, setQuery] = useState('')
   const [section, setSection] = useState<string | null>(null)
   const [problem, setProblem] = useState<Problem | null>(null)
   const [tag, setTag] = useState<string | null>(null)
   const [openAll, setOpenAll] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    api.loadOverview().then(
-      (d) => !cancelled && setData(d),
-      (e) => !cancelled && setError(e instanceof Error ? e.message : String(e)),
-    )
-    return () => {
-      cancelled = true
+  const load = useCallback(async () => {
+    try {
+      const [overview, waiting] = await Promise.all([api.loadOverview(), api.loadPending().catch(() => null)])
+      setData(overview)
+      setPending(waiting)
+      if (waiting) announce(waiting.pages.length)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
     }
   }, [api])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const act = async (work: () => Promise<{ text: string; recipeId?: string }>) => {
+    setBusy(true)
+    setError(null)
+    setNote(null)
+    try {
+      setNote(await work())
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const rows = useMemo(() => (data ? buildOverview(data) : []), [data])
   const sections = useMemo(() => sectionsOf(rows), [rows])
@@ -100,8 +142,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
   }, [rows])
   const shown = useMemo(() => filterRows(rows, { query, section, problem, tag }), [rows, query, section, problem, tag])
 
-  if (error) return <Notice tone="error">{error}</Notice>
-  if (!data) return <p className="text-muted">جارٍ التحميل…</p>
+  if (!data) return error ? <Notice tone="error">{error}</Notice> : <p className="text-muted">جارٍ التحميل…</p>
 
   return (
     <div className="flex flex-col gap-4">
@@ -109,6 +150,67 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
         <h2 className="text-2xl font-bold">مراجعة الوصفات</h2>
         <p className="mt-1 text-sm text-muted">الوسوم والمقادير والتجهيزات والعناصر الغذائية لكل وصفة في مكان واحد. للقراءة فقط: افتحي الوصفة لتعديلها.</p>
       </div>
+
+      {error && <Notice tone="error">{error}</Notice>}
+      {note && (
+        <Notice>
+          {note.text}
+          {note.recipeId && (
+            <>
+              {' '}
+              <a href={href.recipe(note.recipeId)} className="underline">افتحي الوصفة</a>
+            </>
+          )}
+        </Notice>
+      )}
+
+      <Card title={`صفحات جديدة من OneNote تنتظر اعتمادكِ (${pending?.pages.length ?? 0})`}>
+        <p className="mb-3 text-sm text-muted">
+          صفحة جديدة تكتبينها في OneNote لا تدخل الوصفات وحدها: تظهر هنا، فتعتمدينها فتنتقل إلى «الوصفات». يفحص التطبيق الدفتر وحده كل 3 ساعات وهو مفتوح.
+        </p>
+        {pending && pending.pages.length > 0 && (
+          <ul className="mb-3 flex flex-col divide-y divide-line">
+            {pending.pages.map((page) => (
+              <li key={page.page_id} className="flex flex-col gap-2 py-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span dir="auto" className="font-medium">{page.title || 'بدون عنوان'}</span>
+                  <span dir="auto" className="text-sm text-muted">{page.section_name}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    disabled={busy}
+                    onClick={() =>
+                      act(async () => {
+                        const { recipeId } = await api.approve(page.page_id)
+                        return { text: `اعتُمدت «${page.title || 'بدون عنوان'}» وانتقلت إلى الوصفات.`, recipeId }
+                      })
+                    }
+                  >
+                    اعتمدي كوصفة
+                  </Button>
+                  {page.web_url && <LinkButton external href={page.web_url}>افتحي في OneNote ↗</LinkButton>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {pending && pending.pages.length === 0 && <p className="mb-3 text-sm">لا صفحات جديدة تنتظر.</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            kind="plain"
+            disabled={busy}
+            onClick={() =>
+              act(async () => {
+                const s = await api.checkNow()
+                return { text: `فُحصت ${s.pages} صفحة. صفحات جديدة تنتظر: ${s.unlinked}. قُرئت ${s.refreshed} وصفة وتغيّرت ${s.changed}.` }
+              })
+            }
+          >
+            {busy ? 'جارٍ… (قد تأخذ دقيقة أو دقيقتين)' : 'افحصي OneNote الآن'}
+          </Button>
+          <span className="text-sm text-muted">آخر فحص: {timeAgo(pending?.checkedAt ?? null)}</span>
+        </div>
+      </Card>
 
       <input
         type="search"
