@@ -219,7 +219,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
               {stats && stats.size > 0 && (
                 <label className="flex items-center gap-2 text-sm">
                   الترتيب
-                  <select value={sort} onChange={(e) => setSort(e.target.value as SortMode)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-sm">
+                  <select value={sort} onChange={(e) => setSort(e.target.value as SortMode)} className="min-h-11 border border-line bg-bg px-3 text-sm rounded-2xl">
                     {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
                       <option key={mode} value={mode}>{SORT_LABELS[mode]}</option>
                     ))}
@@ -231,7 +231,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
           </div>
           {bulkNote && <Notice>{bulkNote}</Notice>}
           {selecting && (
-            <div className="flex flex-col gap-3 rounded-2xl border border-line p-3">
+            <div className="flex flex-col gap-3 p-3 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
               <p className="text-sm">اختاري الوصفات ثم غيّري وسومها معًا. المحدّدة: {chosen.length}</p>
               <div className="flex flex-wrap gap-2">
                 <Button kind="plain" disabled={shown.length === 0} onClick={() => setSelected(new Set(shown.map((recipe) => recipe.id)))}>

@@ -2,6 +2,7 @@
 // recipes that are still missing something. Tags, food groups and prep tasks are changed right here and
 // saved at once; the ingredients come from the OneNote page, so they are changed there.
 
+import { tintFor } from '../tints'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { href } from '../router'
 import { Badge, Button, Card, LinkButton, Notice } from '../ui'
@@ -66,6 +67,7 @@ const announce = (count: number) => window.dispatchEvent(new CustomEvent(PENDING
 // The most recipes read from OneNote in one go: each read takes about ten seconds.
 const MAX_REFRESH = 8
 
+const tinted = (name: string, active: boolean) => `min-h-9 shrink-0 rounded-full px-3 text-sm font-medium ${active ? 'bg-accent text-on-accent' : tintFor(name)}`
 const chip = (active: boolean) => `min-h-9 shrink-0 rounded-full border px-3 text-sm ${active ? 'border-accent bg-accent text-on-accent' : 'border-line text-ink'}`
 
 interface RowActions {
@@ -80,7 +82,7 @@ interface RowActions {
 
 function Row({ row, open, busy, error, actions }: { row: OverviewRow; open: boolean; busy: boolean; error: string | null; actions: RowActions }) {
   return (
-    <details open={open} className="rounded-2xl border border-line bg-surface p-3">
+    <details open={open} className="bg-surface p-3 rounded-3xl shadow-sm ring-1 ring-line">
       <summary className="flex cursor-pointer flex-col gap-1.5">
         <span dir="auto" className="font-semibold">{row.title}</span>
         <span className="flex flex-wrap gap-1.5">
@@ -311,7 +313,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
           كل الأقسام
         </button>
         {sections.map(([name, n]) => (
-          <button key={name} type="button" dir="auto" className={chip(section === name)} onClick={() => setSection(section === name ? null : name)}>
+          <button key={name} type="button" dir="auto" className={tinted(name, section === name)} onClick={() => setSection(section === name ? null : name)}>
             {name} ({n})
           </button>
         ))}
@@ -320,7 +322,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
       {tags.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="الوسوم">
           {tags.map(([name, n]) => (
-            <button key={name} type="button" dir="auto" className={chip(tag === name)} onClick={() => setTag(tag === name ? null : name)}>
+            <button key={name} type="button" dir="auto" className={tinted(name, tag === name)} onClick={() => setTag(tag === name ? null : name)}>
               {name} ({n})
             </button>
           ))}
@@ -356,7 +358,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
       )}
 
       {problem === 'awaiting' && waitingShown.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface p-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2 bg-surface p-3 text-sm rounded-3xl shadow-sm ring-1 ring-line">
           {confirmingAll ? (
             <>
               <span>تعتمدين {waitingShown.length} وصفة كما هي. تأكدي أنكِ راجعتِها.</span>

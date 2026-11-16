@@ -137,7 +137,7 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
     const bought = item.status === 'bought'
     const have = item.status === 'have'
     return (
-      <li key={item.key} className="rounded-xl border border-line bg-surface p-3">
+      <li key={item.key} className="bg-surface p-3 rounded-2xl ring-1 ring-line">
         <label className="flex min-h-11 cursor-pointer items-start gap-3">
           <input
             type="checkbox"
@@ -234,7 +234,7 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
       {!empty && list.toBuy.length === 0 && <p className="text-sm text-muted">لا شيء للشراء الآن.</p>}
 
       {list.done.length > 0 && (
-        <details className="rounded-2xl border border-line p-3">
+        <details className="p-3 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
           <summary className="cursor-pointer font-medium">تم شراؤه أو متوفر ({list.done.length})</summary>
           <ul className="mt-2 flex flex-col gap-2">{list.done.map(row)}</ul>
         </details>
@@ -250,7 +250,7 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
         >
           <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm font-medium">
             صنف تضيفينه بيدك
-            <input dir="auto" maxLength={120} value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="مثل: حفاضات" className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+            <input dir="auto" maxLength={120} value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="مثل: حفاضات" className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
           </label>
           <Button type="submit" disabled={adding.trim() === ''}>أضيفي</Button>
         </form>
@@ -270,7 +270,7 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
       )}
 
       {list.sentences.length > 0 && (
-        <details className="rounded-2xl border border-line p-3">
+        <details className="p-3 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
           <summary className="cursor-pointer font-medium">أسطر في المقادير تبدو كلامًا لا صنفًا ({list.sentences.length})</summary>
           <p className="mt-2 text-sm text-muted">لم أضعها في القائمة كي لا أخمّن. اقرئيها بنفسك:</p>
           <ul className="mt-2 flex flex-col gap-1 text-sm">
@@ -282,7 +282,7 @@ export default function ShoppingPage({ canEdit, week, today = todayIso, api = re
       )}
 
       {list.pantryAll.length > 0 && (
-        <details className="rounded-2xl border border-line p-3">
+        <details className="p-3 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
           <summary className="cursor-pointer font-medium">دائمًا في البيت ({list.pantryAll.length})</summary>
           <p className="mt-2 text-sm text-muted">لا تظهر للشراء في أي أسبوع إلا إن أعدتِها بنفسك.</p>
           <ul className="mt-2 flex flex-col gap-2">
@@ -341,11 +341,11 @@ function SourceRow({ source, canEdit, unsent, onConfirm, onClear }: { source: It
         >
           <label className="flex flex-col gap-1 text-xs font-medium">
             الكمية
-            <input inputMode="decimal" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value)} className="min-h-11 w-24 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+            <input inputMode="decimal" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value)} className="min-h-11 w-24 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium">
             الوحدة
-            <select value={unit ?? ''} onChange={(e) => setUnit((e.target.value || null) as Unit)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+            <select value={unit ?? ''} onChange={(e) => setUnit((e.target.value || null) as Unit)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
               {UNITS.map((u) => (
                 <option key={u.unit ?? 'count'} value={u.unit ?? ''}>{u.name}</option>
               ))}

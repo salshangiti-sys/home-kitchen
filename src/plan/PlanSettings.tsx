@@ -49,7 +49,7 @@ export default function PlanSettings({ startDow, slots, people, api, onChanged }
 
         <label className="flex flex-col gap-1 text-sm font-medium">
           يبدأ الأسبوع يوم
-          <select value={startDow} disabled={busy} onChange={(e) => void run(() => api.setWeekStart(Number(e.target.value)))} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal">
+          <select value={startDow} disabled={busy} onChange={(e) => void run(() => api.setWeekStart(Number(e.target.value)))} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl">
             {[0, 1, 2, 3, 4, 5, 6].map((dow) => <option key={dow} value={dow}>{dowName(dow)}</option>)}
           </select>
         </label>
@@ -104,9 +104,9 @@ function SlotRow({ slot, first, last, busy, onRename, onMove, onRemove }: { slot
   const [name, setName] = useState(slot.name)
   const [confirming, setConfirming] = useState(false)
   return (
-    <li className="flex flex-col gap-2 rounded-xl border border-line p-2">
+    <li className="flex flex-col gap-2 p-2 rounded-2xl bg-surface ring-1 ring-line">
       <div className="flex flex-wrap items-center gap-2">
-        <input aria-label={`اسم الخانة ${slot.name}`} dir="auto" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-line bg-bg px-3 text-base" />
+        <input aria-label={`اسم الخانة ${slot.name}`} dir="auto" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} className="min-h-11 min-w-0 flex-1 border border-line bg-bg px-3 text-base rounded-2xl" />
         <Button kind="plain" disabled={busy || name.trim() === '' || name.trim() === slot.name} onClick={() => onRename(name)}>احفظي الاسم</Button>
         <Button kind="plain" disabled={busy || first} onClick={() => onMove(-1)}>↑ {slot.name}</Button>
         <Button kind="plain" disabled={busy || last} onClick={() => onMove(1)}>↓ {slot.name}</Button>
@@ -129,7 +129,7 @@ function NewSlot({ busy, onAdd }: { busy: boolean; onAdd: (name: string) => void
   const [name, setName] = useState('')
   return (
     <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) { onAdd(name); setName('') } }}>
-      <input aria-label="اسم خانة جديدة" dir="auto" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder="خانة جديدة، مثل: تحلية" className="min-h-11 min-w-0 flex-1 rounded-xl border border-line bg-bg px-3 text-base" />
+      <input aria-label="اسم خانة جديدة" dir="auto" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder="خانة جديدة، مثل: تحلية" className="min-h-11 min-w-0 flex-1 border border-line bg-bg px-3 text-base rounded-2xl" />
       <Button type="submit" disabled={busy || name.trim() === ''}>أضيفي خانة</Button>
     </form>
   )
@@ -145,7 +145,7 @@ function PersonRow({ person, busy, onSave, onRemove }: { person: Person | null; 
   const split = (text: string) => text.split(/[,،]/).map((a) => a.trim()).filter(Boolean)
 
   return (
-    <li className="flex list-none flex-col gap-2 rounded-xl border border-line p-3">
+    <li className="flex list-none flex-col gap-2 p-3 rounded-2xl bg-surface ring-1 ring-line">
       <form
         className="flex flex-col gap-2"
         onSubmit={(e) => {
@@ -161,14 +161,14 @@ function PersonRow({ person, busy, onSave, onRemove }: { person: Person | null; 
         }}
       >
         <div className="flex flex-wrap gap-2">
-          <input aria-label={`الاسم (${label})`} dir="auto" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} placeholder="الاسم" className="min-h-11 min-w-0 flex-1 rounded-xl border border-line bg-bg px-3 text-base" />
-          <select aria-label={`النوع (${label})`} value={kind} onChange={(e) => setKind(e.target.value as 'adult' | 'child')} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base">
+          <input aria-label={`الاسم (${label})`} dir="auto" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} placeholder="الاسم" className="min-h-11 min-w-0 flex-1 border border-line bg-bg px-3 text-base rounded-2xl" />
+          <select aria-label={`النوع (${label})`} value={kind} onChange={(e) => setKind(e.target.value as 'adult' | 'child')} className="min-h-11 border border-line bg-bg px-3 text-base rounded-2xl">
             <option value="adult">بالغ</option>
             <option value="child">طفل</option>
           </select>
         </div>
-        <input aria-label={`الحساسية (${label})`} dir="auto" value={allergies} onChange={(e) => setAllergies(e.target.value)} placeholder="الحساسية، افصلي بفاصلة" className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base" />
-        <input aria-label={`ملاحظات (${label})`} dir="auto" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ملاحظات" className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base" />
+        <input aria-label={`الحساسية (${label})`} dir="auto" value={allergies} onChange={(e) => setAllergies(e.target.value)} placeholder="الحساسية، افصلي بفاصلة" className="min-h-11 border border-line bg-bg px-3 text-base rounded-2xl" />
+        <input aria-label={`ملاحظات (${label})`} dir="auto" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ملاحظات" className="min-h-11 border border-line bg-bg px-3 text-base rounded-2xl" />
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={busy || name.trim() === ''}>{person ? `احفظي ${person.name}` : 'أضيفي شخصًا'}</Button>
           {person && !confirming && <Button kind="plain" onClick={() => setConfirming(true)}>حذف {person.name}</Button>}

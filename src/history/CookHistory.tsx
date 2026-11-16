@@ -84,7 +84,7 @@ export default function CookHistory({ recipeId, userId, canLog, startLogging = f
   const editingEntry = editing && editing !== 'new' ? entries.find((e) => e.id === editing) : undefined
 
   return (
-    <section ref={section} aria-label="سجل التجارب" className="rounded-2xl border border-line bg-surface p-5">
+    <section ref={section} aria-label="سجل التجارب" className="bg-surface p-5 rounded-3xl shadow-sm ring-1 ring-line">
       <h3 className="mb-1 text-lg font-semibold">سجل التجارب</h3>
 
       {summary.count === 0 ? (
@@ -135,7 +135,7 @@ export default function CookHistory({ recipeId, userId, canLog, startLogging = f
               )
             }
             return (
-              <li key={entry.id} className="flex flex-col gap-1 rounded-xl border border-line p-3">
+              <li key={entry.id} className="flex flex-col gap-1 p-3 rounded-2xl bg-surface ring-1 ring-line">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
                     {formatDate(entry.cooked_on)} <span className="text-sm font-normal text-muted">({daysAgo(entry.cooked_on, now)})</span>
@@ -198,7 +198,7 @@ function EntryForm({
 
   return (
     <form
-      className="mt-3 flex flex-col gap-3 rounded-xl border border-line p-3"
+      className="mt-3 flex flex-col gap-3 p-3 rounded-2xl bg-surface ring-1 ring-line"
       onSubmit={(event) => {
         event.preventDefault()
         onSubmit({ cooked_on: date, rating, note })
@@ -206,7 +206,7 @@ function EntryForm({
     >
       <label className="flex flex-col gap-1 text-sm font-medium">
         تاريخ الطبخ
-        <input type="date" required value={date} max={max} onChange={(e) => setDate(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base" />
+        <input type="date" required value={date} max={max} onChange={(e) => setDate(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base rounded-2xl" />
       </label>
 
       <div className="flex flex-col gap-1">
@@ -236,7 +236,7 @@ function EntryForm({
           maxLength={MAX_NOTE}
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          className="rounded-xl border border-line bg-bg p-3 text-base font-normal"
+          className="border border-line bg-bg p-3 text-base font-normal rounded-2xl"
         />
       </label>
 

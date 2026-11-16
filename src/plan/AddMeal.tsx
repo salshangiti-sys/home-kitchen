@@ -62,7 +62,7 @@ export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, o
         )
       }}
     >
-      <div role="tablist" className="flex gap-1 rounded-xl border border-line bg-surface p-1">
+      <div role="tablist" className="flex gap-1 bg-surface p-1 rounded-2xl ring-1 ring-line">
         {([['recipe', 'وصفة'], ['text', 'نص حر']] as const).map(([value, label]) => (
           <button key={value} type="button" role="tab" aria-selected={mode === value} onClick={() => setMode(value)} className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${mode === value ? 'bg-accent text-on-accent' : 'text-muted'}`}>
             {label}
@@ -73,13 +73,13 @@ export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, o
       {mode === 'recipe' ? (
         <div className="flex flex-col gap-2">
           {picked ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-2xl bg-surface ring-1 ring-line">
               <span dir="auto" className="font-medium">{picked.title}</span>
               <Button kind="plain" onClick={() => setPicked(null)}>غيّري</Button>
             </div>
           ) : (
             <>
-              <input type="search" dir="auto" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحثي عن وصفة…" aria-label="بحث عن وصفة" className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base" />
+              <input type="search" dir="auto" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحثي عن وصفة…" aria-label="بحث عن وصفة" className="min-h-11 border border-line bg-bg px-3 text-base rounded-2xl" />
               {recipes === null && <p className="text-sm text-muted">جارٍ التحميل…</p>}
               {recipes !== null && recipes.length === 0 && <p className="text-sm text-muted">لا وصفات في المكتبة بعد. يمكنك كتابة نص حر.</p>}
               {section !== null && (
@@ -91,7 +91,7 @@ export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, o
               {section === null && !searching && recipes !== null && recipes.length > 0 && (
                 <div role="group" aria-label="أقسام الوصفات" className="grid grid-cols-2 gap-2">
                   {sections.map(([name, count]) => (
-                    <button key={name} type="button" onClick={() => setSection(name)} className="flex min-h-12 items-center justify-between gap-2 rounded-xl border border-line px-3 text-start">
+                    <button key={name} type="button" onClick={() => setSection(name)} className="flex min-h-12 items-center justify-between gap-2 border border-line px-3 text-start rounded-2xl">
                       <span dir="auto" className="text-sm font-medium">{name}</span>
                       <span className="shrink-0 text-xs text-muted">{count}</span>
                     </button>
@@ -103,7 +103,7 @@ export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, o
                 <ul className="flex max-h-80 flex-col gap-1 overflow-y-auto">
                   {found.map((r) => (
                     <li key={r.id}>
-                      <button type="button" onClick={() => setPicked(r)} className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-line px-3 text-start">
+                      <button type="button" onClick={() => setPicked(r)} className="flex min-h-11 w-full items-center justify-between gap-2 border border-line px-3 text-start rounded-2xl">
                         <span dir="auto" className="truncate">{r.title}</span>
                         {section === null && <span dir="auto" className="shrink-0 text-xs text-muted">{r.section}</span>}
                       </button>
@@ -117,20 +117,20 @@ export default function AddMeal({ day, slot, people, loadRecipes, busy, onAdd, o
       ) : (
         <label className="flex flex-col gap-1 text-sm font-medium">
           الوجبة
-          <input dir="auto" maxLength={120} value={text} onChange={(e) => setText(e.target.value)} placeholder="مثال: أرز أبيض وسلطة" className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+          <input dir="auto" maxLength={120} value={text} onChange={(e) => setText(e.target.value)} placeholder="مثال: أرز أبيض وسلطة" className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
         </label>
       )}
 
       <label className="flex flex-col gap-1 text-sm font-medium">
         عدد الحصص (اختياري)
-        <input type="number" min="1" max="100" step="any" inputMode="decimal" value={servings} onChange={(e) => setServings(e.target.value)} className="min-h-11 rounded-xl border border-line bg-bg px-3 text-base font-normal" />
+        <input type="number" min="1" max="100" step="any" inputMode="decimal" value={servings} onChange={(e) => setServings(e.target.value)} className="min-h-11 border border-line bg-bg px-3 text-base font-normal rounded-2xl" />
       </label>
 
       {people.length > 0 && (
         <fieldset className="flex flex-wrap gap-2">
           <legend className="mb-1 text-sm font-medium">لمن؟ (اختياري)</legend>
           {people.map((p) => (
-            <label key={p.id} className="flex min-h-11 items-center gap-2 rounded-xl border border-line px-3 text-sm">
+            <label key={p.id} className="flex min-h-11 items-center gap-2 border border-line px-3 text-sm rounded-2xl">
               <input type="checkbox" checked={chosen.includes(p.id)} onChange={() => toggle(p.id)} className="size-5 accent-[var(--accent)]" />
               {p.name}
             </label>

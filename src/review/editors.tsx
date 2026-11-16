@@ -102,7 +102,7 @@ function PrepRow({ item, busy, onSave, onRemove }: { item: PrepItem; busy: boole
     save({ body: text })
   }
   return (
-    <li className="flex flex-col gap-2 rounded-xl border border-line p-2">
+    <li className="flex flex-col gap-2 p-2 rounded-2xl bg-surface ring-1 ring-line">
       <div className="flex flex-wrap gap-2">
         <select aria-label="نوع التجهيز" value={item.kind} disabled={busy} onChange={(e) => save({ kind: e.target.value as PrepKind })} className={FIELD}>
           {KINDS.map((k) => (

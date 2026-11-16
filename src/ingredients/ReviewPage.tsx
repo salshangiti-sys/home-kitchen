@@ -84,7 +84,7 @@ export default function ReviewPage({ canEdit, api = real }: { canEdit: boolean; 
       </ul>
 
       {done.length > 0 && (
-        <details className="rounded-2xl border border-line p-4">
+        <details className="p-4 rounded-3xl bg-surface shadow-sm ring-1 ring-line">
           <summary className="cursor-pointer font-medium">تمت مراجعتها ({done.length})</summary>
           <ul className="mt-3 flex flex-col gap-4">
             {done.map((group) => (
@@ -100,7 +100,7 @@ export default function ReviewPage({ canEdit, api = real }: { canEdit: boolean; 
 function Group({ group, canEdit, busy, api, act }: { group: ReviewGroup; canEdit: boolean; busy: boolean; api: ReviewApi; act: (work: () => Promise<unknown>) => Promise<void> }) {
   const [adding, setAdding] = useState('')
   return (
-    <li className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4">
+    <li className="flex flex-col gap-3 bg-surface p-4 rounded-3xl shadow-sm ring-1 ring-line">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <a dir="auto" href={href.recipe(group.recipe.id)} className="text-lg font-semibold text-accent underline">{group.recipe.title}</a>
         <span className="text-sm text-muted">{group.recipe.section}</span>
@@ -136,7 +136,7 @@ function Group({ group, canEdit, busy, api, act }: { group: ReviewGroup; canEdit
               if (text) void act(async () => { await api.addIngredient(group.recipe.id, text); setAdding('') })
             }}
           >
-            <input dir="auto" maxLength={200} value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="مقدار فاتني…" aria-label={`إضافة مقدار إلى ${group.recipe.title}`} className="min-h-11 flex-1 rounded-xl border border-line bg-bg px-3 text-base" />
+            <input dir="auto" maxLength={200} value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="مقدار فاتني…" aria-label={`إضافة مقدار إلى ${group.recipe.title}`} className="min-h-11 flex-1 border border-line bg-bg px-3 text-base rounded-2xl" />
             <Button type="submit" kind="plain" disabled={busy || adding.trim() === ''}>أضيفي</Button>
           </form>
         </div>
@@ -159,7 +159,7 @@ function Line({ line, canEdit, busy, api, act }: { line: Suggestion; canEdit: bo
             if (text.trim()) void act(async () => { await api.setSuggestion(line.id, 'confirmed', text); setEditing(false) })
           }}
         >
-          <input dir="auto" maxLength={200} value={text} onChange={(e) => setText(e.target.value)} aria-label="نص المقدار" className="min-h-11 min-w-0 flex-1 rounded-xl border border-line bg-bg px-3 text-base" />
+          <input dir="auto" maxLength={200} value={text} onChange={(e) => setText(e.target.value)} aria-label="نص المقدار" className="min-h-11 min-w-0 flex-1 border border-line bg-bg px-3 text-base rounded-2xl" />
           <Button type="submit" disabled={busy || text.trim() === ''}>أكّدي بعد التصحيح</Button>
           <Button kind="plain" onClick={() => { setText(line.text); setEditing(false) }}>إلغاء</Button>
         </form>

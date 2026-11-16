@@ -74,7 +74,7 @@ export default function VersionHistory({ recipeId, currentVersion, restore = 'no
     }
   }
   return (
-    <section aria-label="الإصدارات السابقة" className="rounded-2xl border border-line bg-surface p-5">
+    <section aria-label="الإصدارات السابقة" className="bg-surface p-5 rounded-3xl shadow-sm ring-1 ring-line">
       <h3 className="mb-1 text-lg font-semibold">الإصدارات السابقة</h3>
       <p className="mb-3 text-sm text-muted">كل تغيير في الوصفة يحفظ نسخة منها. افتحي إصدارًا لترين ما تغيّر فيه.</p>
       {outcome && <div className="mb-3"><Notice tone={outcome.tone}>{outcome.text}</Notice></div>}
@@ -84,7 +84,7 @@ export default function VersionHistory({ recipeId, currentVersion, restore = 'no
           const day = localDate(new Date(entry.changed_at))
           const expanded = open === entry.version
           return (
-            <li key={entry.version} className="rounded-xl border border-line">
+            <li key={entry.version} className="rounded-2xl bg-surface ring-1 ring-line">
               <button
                 type="button"
                 aria-expanded={expanded}
