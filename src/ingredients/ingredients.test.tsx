@@ -49,6 +49,15 @@ describe('which ingredient lines the app uses', () => {
     expect(usableIngredients(['بصل'], s)).toEqual({ lines: ['بصل'], from: 'onenote' })
   })
 
+  it('leaves out the label lines (they name a part of the recipe, they are not ingredients)', () => {
+    expect(usableIngredients(['عجينة جلاش', 'الحشوة:', 'جبنة', 'وصوص التغميس:', 'ملح'], [])).toEqual({ lines: ['عجينة جلاش', 'جبنة', 'ملح'], from: 'onenote' })
+    expect(usableIngredients(['الحشوة:'], s)).toEqual({ lines: ['جزر', 'كوسة'], from: 'app' })
+  })
+
+  it('splits a stored line that holds several ingredients', () => {
+    expect(usableIngredients(['جبن موزاريلا\uFFFCجبن تشيدر', 'ملح'], [])).toEqual({ lines: ['جبن موزاريلا', 'جبن تشيدر', 'ملح'], from: 'onenote' })
+  })
+
   it('otherwise only the confirmed lines, in order: never a waiting or an ignored one', () => {
     expect(usableIngredients([], s)).toEqual({ lines: ['جزر', 'كوسة'], from: 'app' })
   })

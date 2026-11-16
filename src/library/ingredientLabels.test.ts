@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isLabelLine, splitByLabels } from './ingredientLabels'
+import { isLabelLine, splitByLabels, splitInline } from './ingredientLabels'
 
 const lines = (...texts: string[]) => texts.map((text) => ({ text }))
 
@@ -15,6 +15,8 @@ describe('label lines', () => {
     expect(isLabelLine(':')).toBe(false)
     expect(isLabelLine('استعملت ٢٥٠ جرام جبنة بيضاء المراعي وشوية جبنة الطيب كمشتين جبن موزاريلا:')).toBe(false)
     expect(isLabelLine('2 كوب: حليب')).toBe(false)
+    expect(isLabelLine('في الخلاط: علبة طماطم مقشر و بهارات( ملعقة كبيرة ملح، شوية فلفل اسود، ملعقة صغيرة كزبرة ناشفة، ملعقة كبيرة كمون ) - حطيت نفس المقادير')).toBe(false)
+    expect(isLabelLine('حطيت في الصينية خضار مع الدجاج:')).toBe(true)
   })
 })
 
@@ -33,5 +35,16 @@ describe('splitting a group at its labels', () => {
   it('leaves a group without labels as it is, and drops a label with no lines', () => {
     expect(splitByLabels({ name: 'الصوص', items: lines('ملح', 'زيت') })).toEqual([{ name: 'الصوص', items: lines('ملح', 'زيت') }])
     expect(splitByLabels({ name: null, items: lines('ملح', 'الحشوة:') })).toEqual([{ name: null, items: lines('ملح') }])
+  })
+})
+
+describe('several ingredients in one stored line', () => {
+  it('splits at the invisible line-break character', () => {
+    expect(splitInline('توست بدون الأطراف\uFFFC٥٠٠ غ لحم مفروم\uFFFC حبة بصل')).toEqual(['توست بدون الأطراف', '٥٠٠ غ لحم مفروم', 'حبة بصل'])
+    expect(splitInline('ملح')).toEqual(['ملح'])
+  })
+  it('shows each piece as its own line', () => {
+    const parts = splitByLabels({ name: null, items: [{ text: 'جبن موزاريلا\uFFFCجبن تشيدر' }, { text: 'ملح' }] })
+    expect(parts[0].items.map((i) => i.text)).toEqual(['جبن موزاريلا', 'جبن تشيدر', 'ملح'])
   })
 })
