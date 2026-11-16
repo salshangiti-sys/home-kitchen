@@ -96,7 +96,7 @@ describe('the print page', () => {
     render(<PrintPage week={WEEK} withTasks={false} api={a} print={print} today={() => WEEK} />)
     const sheet = await screen.findByRole('article', { name: 'الخطة المطبوعة' })
     expect(within(sheet).getByRole('heading', { level: 1 }).textContent).toBe('جدول أسبوع 14 نوفمبر – 20 نوفمبر 2026')
-    expect(document.title).toBe('جدول أسبوع 14 نوفمبر – 20 نوفمبر 2026')
+    await waitFor(() => expect(document.title).toBe('جدول أسبوع 14 نوفمبر – 20 نوفمبر 2026')) // set by an effect after the first paint
     const saturday = within(sheet).getByRole('region', { name: /السبت/ })
     expect(within(saturday).getByText('غداء')).toBeTruthy()
     expect(within(saturday).getByText(/كبسة دجاج/)).toBeTruthy()

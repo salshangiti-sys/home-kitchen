@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { buildOverview, filterRows, problemCounts, uncutVegetables, type OverviewData } from './overview'
 
 const data: OverviewData = {
+  flags: [
+    { id: 'f1', recipe_id: 'c', flag: 'added_from_onenote', status: 'open' },
+    { id: 'f2', recipe_id: 'b', flag: 'auto_filled', status: 'reviewed' },
+  ],
   recipes: [
     { id: 'a', title: 'إيدام دجاج بالكريمة', section: 'صواني وايدامات', custom_tags: ['دجاج'] },
     { id: 'b', title: 'حلا الاوريو', section: 'الحلا', custom_tags: [] },
@@ -61,11 +65,17 @@ describe('one row per recipe', () => {
     expect(byId('a').problems).toEqual(['cut_missing'])
     expect(byId('a').uncut).toEqual(['جزر', 'فلفل رومي'])
     expect(byId('b').problems).toEqual(['no_tags', 'no_prep', 'no_groups'])
-    expect(byId('c').problems).toEqual(['no_ingredients', 'no_prep', 'no_groups'])
+    expect(byId('c').problems).toEqual(['awaiting', 'no_ingredients', 'no_prep', 'no_groups'])
+  })
+
+  it('a recipe waits for approval while its added-from-OneNote or auto-filled flag is open', () => {
+    expect(byId('c').awaiting).toEqual(['f1'])
+    expect(byId('b').awaiting).toEqual([]) // its flag is already reviewed
+    expect(byId('a').awaiting).toEqual([])
   })
 
   it('counts them', () => {
-    expect(Object.fromEntries(problemCounts(rows))).toEqual({ no_tags: 1, no_ingredients: 1, no_prep: 2, cut_missing: 1, no_groups: 2 })
+    expect(Object.fromEntries(problemCounts(rows))).toEqual({ awaiting: 1, no_tags: 1, no_ingredients: 1, no_prep: 2, cut_missing: 1, no_groups: 2 })
   })
 })
 

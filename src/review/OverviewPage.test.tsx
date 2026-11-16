@@ -4,6 +4,7 @@ import OverviewPage, { PENDING_EVENT, type OverviewApi, type Pending } from './O
 import type { OverviewData } from './overview'
 
 const data: OverviewData = {
+  flags: [{ id: 'f9', recipe_id: 'b', flag: 'auto_filled', status: 'open' }],
   recipes: [
     { id: 'a', title: 'إيدام دجاج بالكريمة', section: 'صواني وايدامات', custom_tags: ['دجاج'] },
     { id: 'b', title: 'حلا الاوريو', section: 'الحلا', custom_tags: [] },
@@ -15,16 +16,20 @@ const data: OverviewData = {
 }
 const page = { page_id: 'p1', title: 'كبسة الروبيان', section_name: 'أرزاز ومكرونات (سمك)', web_url: 'https://onenote.example/p1' }
 
-function fakeApi(pending: Pending = { pages: [], checkedAt: null }): OverviewApi & { approved: string[] } {
-  const state = { pending, approved: [] as string[] }
+function fakeApi(pending: Pending = { pages: [], checkedAt: null }): OverviewApi & { approved: string[]; reviewed: string[] } {
+  const state = { pending, approved: [] as string[], reviewed: [] as string[], flags: data.flags }
   return {
     approved: state.approved,
+    reviewed: state.reviewed,
+    approveRecipes: async (ids) => {
+      state.reviewed.push(...ids)
+    },
     loadOverview: async () => data,
     loadPending: async () => state.pending,
     approve: async (id) => {
       state.approved.push(id)
       state.pending = { ...state.pending, pages: state.pending.pages.filter((p) => p.page_id !== id) }
-      return { recipeId: 'new-1' }
+      return { recipeId: 'new-1', filled: { tags: ['دجاج'], groups: ['protein'], prep: [] } }
     },
     checkNow: async () => ({ pages: 135, unlinked: 1, missing: [], refreshed: 4, changed: 0 }),
   }
@@ -97,7 +102,7 @@ describe('new pages from OneNote waiting for approval', () => {
     window.addEventListener(PENDING_EVENT, (e) => heard.push((e as CustomEvent<number>).detail))
     render(<OverviewPage api={fake} />)
     fireEvent.click(await screen.findByRole('button', { name: 'اعتمدي كوصفة' }))
-    expect(await screen.findByText(/اعتُمدت «كبسة الروبيان» وانتقلت إلى الوصفات/)).toBeTruthy()
+    expect(await screen.findByText(/اعتُمدت «كبسة الروبيان» وانتقلت إلى الوصفات. ملأتُ لها وسومًا/)).toBeTruthy()
     expect(fake.approved).toEqual(['p1'])
     expect(screen.getByRole('link', { name: 'افتحي الوصفة' }).getAttribute('href')).toBe('#/r/new-1')
     await waitFor(() => expect(screen.getByText('صفحات جديدة من OneNote تنتظر اعتمادكِ (0)')).toBeTruthy())
@@ -116,5 +121,31 @@ describe('new pages from OneNote waiting for approval', () => {
   it('still shows the recipes when the waiting pages cannot be read', async () => {
     render(<OverviewPage api={{ ...fakeApi(), loadPending: async () => { throw new Error('offline') } }} />)
     expect(await screen.findByText('إيدام دجاج بالكريمة')).toBeTruthy()
+  })
+})
+
+describe('recipes waiting for her approval', () => {
+  it('shows what waits, and one button approves a recipe as it is', async () => {
+    const fake = fakeApi()
+    render(<OverviewPage api={fake} />)
+    await screen.findByText('إيدام دجاج بالكريمة')
+    const filter = screen.getByRole('group', { name: 'ما ينقص' })
+    fireEvent.click(within(filter).getByRole('button', { name: /تنتظر اعتمادكِ \(1\)/ }))
+    expect(screen.queryByText('إيدام دجاج بالكريمة')).toBeNull()
+    fireEvent.click(screen.getByText('حلا الاوريو'))
+    fireEvent.click(screen.getByRole('button', { name: 'اعتمدي' }))
+    await waitFor(() => expect(fake.reviewed).toEqual(['f9']))
+    expect(await screen.findByText('اعتُمدت «حلا الاوريو».')).toBeTruthy()
+  })
+
+  it('approves everything shown only after she confirms', async () => {
+    const fake = fakeApi()
+    render(<OverviewPage api={fake} />)
+    await screen.findByText('إيدام دجاج بالكريمة')
+    fireEvent.click(within(screen.getByRole('group', { name: 'ما ينقص' })).getByRole('button', { name: /تنتظر اعتمادكِ/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'اعتمدي كل الظاهرة (1)' }))
+    expect(fake.reviewed).toEqual([]) // nothing yet: it asks first
+    fireEvent.click(screen.getByRole('button', { name: 'نعم، اعتمدي الكل' }))
+    await waitFor(() => expect(fake.reviewed).toEqual(['f9']))
   })
 })
