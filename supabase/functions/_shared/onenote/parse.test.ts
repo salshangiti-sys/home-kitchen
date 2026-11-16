@@ -148,6 +148,19 @@ describe('heading fallback', () => {
     expect(parsed.sections.steps).toEqual(['نخفق البيض'])
   })
 
+  it('finds a section whose heading ends with a colon («المقادير:»)', () => {
+    const html = `<html><head><title>كرات لحم</title></head><body><div data-id="_default">
+      <p>https://www.instagram.com/p/x/</p>
+      <p>المقادير:</p><ul><li>كرات لحم</li><li>رز</li></ul>
+      <p>ملاحظاتي:</p><ul><li>حطيت بهارات</li></ul>
+    </div></body></html>`
+    const parsed = parsePageHtml(html)
+    expect(parsed.foundBy.ing).toBe('heading')
+    expect(parsed.sections.ing).toEqual([{ name: null, items: ['كرات لحم', 'رز'] }])
+    expect(parsed.foundBy.notes).toBe('heading')
+    expect(parsed.sections.notes).toEqual(['حطيت بهارات'])
+  })
+
   it('uses data-id where present and headings only for the rest', () => {
     const html = `<html><head><title>شوربة</title></head><body><div data-id="_default">
       <div data-id="hk-ing"><h2>المقادير</h2><ul><li>عدس</li></ul></div>
