@@ -201,6 +201,8 @@ describe('changing a recipe right in the list', () => {
     render(<OverviewPage api={fake} />)
     await screen.findByText('إيدام دجاج بالكريمة')
     expect(screen.queryByText('حلا الاوريو')).toBeNull()
+    // the section counts are of the working list: the approved recipe's section is not counted
+    expect(within(screen.getByRole('group', { name: 'الأقسام' })).queryByRole('button', { name: /الحلا/ })).toBeNull()
     fireEvent.click(within(screen.getByRole('group', { name: 'ما ينقص' })).getByRole('button', { name: /اعتمدتُها \(1\)/ }))
     expect(screen.getByText('حلا الاوريو')).toBeTruthy()
     expect(screen.queryByText('إيدام دجاج بالكريمة')).toBeNull()
