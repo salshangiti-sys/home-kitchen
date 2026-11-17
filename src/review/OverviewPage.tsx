@@ -1,5 +1,5 @@
 // «مراجعة»: all recipes in one list with their tags, ingredients, prep tasks and food groups, and the
-// recipes that are still missing something. Tags, food groups and prep tasks are changed right here and
+// recipes that are still missing something. Tags and prep tasks are changed right here and
 // saved at once; the ingredients come from the OneNote page, so they are changed there.
 
 import { tintFor } from '../tints'
@@ -11,9 +11,8 @@ import { sectionsOf } from '../library/sections'
 import { loadRecipe, saveRecipe, setFlagStatus } from '../library/api'
 import { autofillRecipe } from './apply'
 import type { Autofill } from './autofill'
-import { setFoodGroups, type FoodGroup } from '../nutrition/api'
 import { removeTemplate, saveTemplate, type TemplateInput } from '../prep/api'
-import { GroupsEditor, PrepEditor, TagsEditor } from './editors'
+import { PrepEditor, TagsEditor } from './editors'
 import { PROBLEM_LABELS, buildOverview, filterRows, loadOverview, problemCounts, type OverviewData, type OverviewRow, type Problem } from './overview'
 
 export interface Pending {
@@ -29,7 +28,6 @@ export interface OverviewApi {
   checkNow: () => Promise<CheckSummary>
   refreshFromOneNote: (recipeId: string) => Promise<{ status: 'ok' | 'missing' | 'error'; error: string | null }> // reads the recipe's page now
   setTags: (recipeId: string, tags: string[]) => Promise<void>
-  setGroups: (recipeId: string, groups: FoodGroup[]) => Promise<void>
   saveTask: (recipeId: string, id: string | null, task: TemplateInput) => Promise<string> // the task's id
   removeTask: (id: string) => Promise<void>
 }
@@ -55,7 +53,6 @@ const real: OverviewApi = {
     if (!loaded) throw new Error('الوصفة غير موجودة.')
     await saveRecipe({ ...loaded.doc, tags: { ...(loaded.doc.tags ?? {}), custom: tags } }, loaded.version)
   },
-  setGroups: setFoodGroups,
   saveTask: (recipeId, id, task) => saveTemplate(id, recipeId, task),
   removeTask: removeTemplate,
 }
@@ -73,7 +70,6 @@ const chip = (active: boolean) => `min-h-9 shrink-0 rounded-full border px-3 tex
 interface RowActions {
   onApprove: (flagIds: string[]) => void
   onTags: (tags: string[]) => void
-  onGroups: (groups: FoodGroup[]) => void
   onSaveTask: (id: string, task: TemplateInput) => void
   onRemoveTask: (id: string) => void
   onAddTask: (task: TemplateInput) => void
@@ -99,10 +95,6 @@ function Row({ row, open, busy, error, actions }: { row: OverviewRow; open: bool
         <section aria-label="الوسوم">
           <h4 className="mb-1 font-semibold">الوسوم</h4>
           <TagsEditor tags={row.tags} busy={busy} onChange={actions.onTags} />
-        </section>
-        <section aria-label="العناصر الغذائية">
-          <h4 className="mb-1 font-semibold">العناصر الغذائية</h4>
-          <GroupsEditor groups={row.groups} busy={busy} onChange={actions.onGroups} />
         </section>
         <section aria-label="التجهيزات">
           <h4 className="mb-1 font-semibold">التجهيزات</h4>
@@ -151,7 +143,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
   const [busy, setBusy] = useState(false)
   const [query, setQuery] = useState('')
   const [section, setSection] = useState<string | null>(null)
-  const [problem, setProblem] = useState<Problem | null>(null)
+  const [problem, setProblem] = useState<Problem | 'approved' | null>(null)
   const [tag, setTag] = useState<string | null>(null)
   const [openAll, setOpenAll] = useState(false)
   const [confirmingAll, setConfirmingAll] = useState(false)
@@ -217,7 +209,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="text-2xl font-bold">مراجعة الوصفات</h2>
-        <p className="mt-1 text-sm text-muted">الوسوم والمقادير والتجهيزات والعناصر الغذائية لكل وصفة في مكان واحد. للقراءة فقط: افتحي الوصفة لتعديلها.</p>
+        <p className="mt-1 text-sm text-muted">الوسوم والمقادير والتجهيزات لكل وصفة في مكان واحد. للقراءة فقط: افتحي الوصفة لتعديلها.</p>
       </div>
 
       {error && <Notice tone="error">{error}</Notice>}
@@ -298,7 +290,7 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
 
       <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="ما ينقص">
         <button type="button" className={chip(problem === null)} onClick={() => setProblem(null)}>
-          الكل ({rows.length})
+          المتبقية ({rows.filter((r) => !r.approved).length})
         </button>
         {counts
           .filter(([, n]) => n > 0)
@@ -307,6 +299,11 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
               {PROBLEM_LABELS[p]} ({n})
             </button>
           ))}
+        {rows.some((r) => r.approved) && (
+          <button type="button" className={chip(problem === 'approved')} onClick={() => setProblem(problem === 'approved' ? null : 'approved')}>
+            اعتمدتُها ({rows.filter((r) => r.approved).length})
+          </button>
+        )}
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="الأقسام">
@@ -409,12 +406,6 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
                   }),
                 onTags: (tags) =>
                   void edit(row.id, () => api.setTags(row.id, tags), (d) => ({ ...d, recipes: d.recipes.map((r) => (r.id === row.id ? { ...r, custom_tags: tags } : r)) })),
-                onGroups: (groups) =>
-                  void edit(
-                    row.id,
-                    () => api.setGroups(row.id, groups),
-                    (d) => ({ ...d, groups: [...d.groups.filter((g) => g.recipe_id !== row.id), ...groups.map((food_group) => ({ recipe_id: row.id, food_group }))] }),
-                  ),
                 onSaveTask: (id, task) =>
                   void edit(
                     row.id,
