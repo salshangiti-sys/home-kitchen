@@ -12,7 +12,6 @@ const data: OverviewData = {
   lines: [{ recipe_id: 'a', position: 1, text: 'كريمة طبخ' }],
   suggestions: [{ recipe_id: 'b', position: 1, text: '٢٤ اوريو' }],
   templates: [{ id: 't1', recipe_id: 'a', kind: 'wash_chop', timing: 'before_cooking', at_time: null, body: 'تقطيع الخضار: بصل، جزر (مبشور)', position: 1 }],
-  groups: [{ recipe_id: 'a', food_group: 'dairy' }],
   pages: [{ recipe_id: 'a', web_url: 'https://onenote.example/a' }],
 }
 const page = { page_id: 'p1', title: 'كبسة الروبيان', section_name: 'أرزاز ومكرونات (سمك)', web_url: 'https://onenote.example/p1' }
@@ -28,9 +27,6 @@ function fakeApi(pending: Pending = { pages: [], checkedAt: null }): Fake {
     setTags: async (id, tags) => {
       if (fake.failWith) throw new Error(fake.failWith)
       state.edits.push(`tags ${id} ${tags.join('|')}`)
-    },
-    setGroups: async (id, groups) => {
-      state.edits.push(`groups ${id} ${groups.join('|')}`)
     },
     saveTask: async (recipeId, id, task) => {
       state.edits.push(`task ${recipeId} ${id ?? 'new'} ${task.kind} ${task.timing} ${task.body}`)
@@ -194,14 +190,20 @@ describe('changing a recipe right in the list', () => {
     await waitFor(() => expect(fake.edits).toContain('tags a '))
   })
 
-  it('switches a food group on and off', async () => {
-    const fake = fakeApi()
-    await open(fake)
-    const groups = screen.getAllByRole('group', { name: 'العناصر الغذائية' })
-    fireEvent.click(within(groups[1]).getByRole('button', { name: 'نشويات' })) // «حلا الاوريو» has none yet
-    await waitFor(() => expect(fake.edits).toEqual(['groups b carbs']))
-    fireEvent.click(within(groups[0]).getByRole('button', { name: 'ألبان' })) // «إيدام» has dairy: off
-    await waitFor(() => expect(fake.edits).toContain('groups a '))
+  it('has no food-groups section', async () => {
+    await open(fakeApi())
+    expect(screen.queryByRole('group', { name: 'العناصر الغذائية' })).toBeNull()
+    expect(screen.queryByText(/بلا عناصر غذائية/)).toBeNull()
+  })
+
+  it('a recipe she approved leaves the working list and waits under «اعتمدتُها»', async () => {
+    const fake = { ...fakeApi(), loadOverview: async () => ({ ...data, flags: [{ id: 'f9', recipe_id: 'b', flag: 'auto_filled' as const, status: 'reviewed' as const }] }) }
+    render(<OverviewPage api={fake} />)
+    await screen.findByText('إيدام دجاج بالكريمة')
+    expect(screen.queryByText('حلا الاوريو')).toBeNull()
+    fireEvent.click(within(screen.getByRole('group', { name: 'ما ينقص' })).getByRole('button', { name: /اعتمدتُها \(1\)/ }))
+    expect(screen.getByText('حلا الاوريو')).toBeTruthy()
+    expect(screen.queryByText('إيدام دجاج بالكريمة')).toBeNull()
   })
 
   it('edits, adds and deletes a prep task', async () => {

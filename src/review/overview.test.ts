@@ -24,10 +24,6 @@ const data: OverviewData = {
     { id: 't1', recipe_id: 'a', kind: 'defrost', timing: 'morning', at_time: null, body: 'أخرجي الدجاج من الفريزر', position: 1 },
     { id: 't2', recipe_id: 'a', kind: 'wash_chop', timing: 'before_cooking', at_time: null, body: 'تقطيع الخضار: بصل (مفروم)، جزر، فلفل رومي', position: 4 },
   ],
-  groups: [
-    { recipe_id: 'a', food_group: 'protein' },
-    { recipe_id: 'a', food_group: 'dairy' },
-  ],
 }
 
 describe('which vegetables still have no cutting method', () => {
@@ -53,12 +49,11 @@ describe('one row per recipe', () => {
     expect(byId('b').ingredientsFromApp).toBe(true)
   })
 
-  it('shows the prep tasks with their kind and time, and the groups in a fixed order', () => {
+  it('shows the prep tasks with their kind and time', () => {
     expect(byId('a').prep).toEqual([
       { id: 't1', kind: 'defrost', timing: 'morning', atTime: null, label: 'إذابة · صباحًا', body: 'أخرجي الدجاج من الفريزر' },
       { id: 't2', kind: 'wash_chop', timing: 'before_cooking', atTime: null, label: 'غسل وتقطيع · قبل الطبخ', body: 'تقطيع الخضار: بصل (مفروم)، جزر، فلفل رومي' },
     ])
-    expect(byId('a').groups).toEqual(['protein', 'dairy'])
   })
 
   it('a draft written by the app waits for approval too', () => {
@@ -69,8 +64,18 @@ describe('one row per recipe', () => {
   it('says what each recipe is still missing', () => {
     expect(byId('a').problems).toEqual(['cut_missing'])
     expect(byId('a').uncut).toEqual(['جزر', 'فلفل رومي'])
-    expect(byId('b').problems).toEqual(['no_tags', 'no_prep', 'no_groups'])
-    expect(byId('c').problems).toEqual(['awaiting', 'no_ingredients', 'no_prep', 'no_groups'])
+    expect(byId('c').problems).toEqual(['awaiting', 'no_ingredients', 'no_prep'])
+  })
+
+  it('a recipe she approved is done: no problems, and it leaves the working list', () => {
+    expect(byId('b').approved).toBe(true) // its flag is reviewed
+    expect(byId('b').problems).toEqual([])
+    expect(byId('a').approved).toBe(false) // never flagged
+    expect(byId('c').approved).toBe(false) // still waiting
+    const none = { query: '', section: null, problem: null, tag: null }
+    expect(filterRows(rows, none).map((r) => r.id)).not.toContain('b')
+    expect(filterRows(rows, { ...none, problem: 'approved' }).map((r) => r.id)).toEqual(['b'])
+    expect(filterRows(rows, { ...none, query: 'اوريو' }).map((r) => r.id)).toContain('b') // a search finds it anyway
   })
 
   it('a recipe waits for approval while its added-from-OneNote or auto-filled flag is open', () => {
@@ -80,7 +85,7 @@ describe('one row per recipe', () => {
   })
 
   it('counts them', () => {
-    expect(Object.fromEntries(problemCounts(rows))).toEqual({ awaiting: 1, no_tags: 1, no_ingredients: 1, no_prep: 2, cut_missing: 1, no_groups: 2 })
+    expect(Object.fromEntries(problemCounts(rows))).toEqual({ awaiting: 1, no_tags: 0, no_ingredients: 1, no_prep: 1, cut_missing: 1 }) // «b» is approved, so it counts nothing
   })
 })
 
@@ -89,8 +94,8 @@ describe('filtering the list', () => {
   const none = { query: '', section: null, problem: null, tag: null }
 
   it('by section, by what is missing, by tag and by name or tag text', () => {
-    expect(filterRows(rows, { ...none, section: 'الحلا' }).map((r) => r.id)).toEqual(['b'])
-    expect(filterRows(rows, { ...none, problem: 'no_prep' }).map((r) => r.id)).toEqual(['b', 'c'])
+    expect(filterRows(rows, { ...none, section: 'الحلا', problem: 'approved' }).map((r) => r.id)).toEqual(['b'])
+    expect(filterRows(rows, { ...none, problem: 'no_prep' }).map((r) => r.id)).toEqual(['c'])
     expect(filterRows(rows, { ...none, tag: 'دجاج' }).map((r) => r.id)).toEqual(['a', 'c'])
     expect(filterRows(rows, { ...none, query: 'اوريو' }).map((r) => r.id)).toEqual(['b'])
     expect(filterRows(rows, { ...none, query: 'دجاج' }).map((r) => r.id)).toEqual(['a', 'c'])
