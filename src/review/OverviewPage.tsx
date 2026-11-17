@@ -193,13 +193,15 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
   }
 
   const rows = useMemo(() => (data ? buildOverview(data) : []), [data])
-  const sections = useMemo(() => sectionsOf(rows), [rows])
+  // the section and tag counts are of the list she is working on, so they match what a tap shows
+  const inList = useMemo(() => rows.filter((r) => (problem === 'approved' ? r.approved : !r.approved)), [rows, problem])
+  const sections = useMemo(() => sectionsOf(inList), [inList])
   const counts = useMemo(() => problemCounts(rows), [rows])
   const tags = useMemo(() => {
     const map = new Map<string, number>()
-    for (const r of rows) for (const t of r.tags) map.set(t, (map.get(t) ?? 0) + 1)
+    for (const r of inList) for (const t of r.tags) map.set(t, (map.get(t) ?? 0) + 1)
     return [...map].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ar'))
-  }, [rows])
+  }, [inList])
   const shown = useMemo(() => filterRows(rows, { query, section, problem, tag }), [rows, query, section, problem, tag])
   const waitingShown = useMemo(() => shown.filter((r) => r.awaiting.length > 0), [shown])
 

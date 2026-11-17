@@ -1,7 +1,7 @@
-// One recipe, as the app needs it: its title, tags, photos and INGREDIENTS (they feed the shopping list
-// and the prep tasks), planning and cooking history. The details (method, notes, the original text) are
-// read in OneNote: a big button opens the page. The method, notes and original text stay stored (they
-// are read from OneNote and kept in the backup) but are not shown here, and they are never edited here.
+// One recipe: its title, tags, photos and INGREDIENTS (they feed the shopping list and the prep tasks),
+// planning and cooking history, and, read-only, the method, the notes and the full text of the OneNote
+// page (read from the page each time it is opened, so they never go stale). They are never edited here:
+// a big button opens the page. The source link and the version history stay hidden.
 // Every text shown is exactly as written, each in its own direction (dir="auto").
 //
 // A recipe with a OneNote page is read from the page again each time it is opened (for owners and
@@ -153,6 +153,9 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         )}
         <PhotoGallery recipeId={id} title={doc.title} canEdit={canEdit && !inTrash} />
         <div className="flex flex-wrap gap-2">
+          {!inTrash && (doc.steps.length > 0 || doc.ingredient_groups.some((g) => g.items.length > 0)) && (
+            <LinkButton href={href.cook(id)} kind="primary">وضع الطبخ</LinkButton>
+          )}
           {page?.web_url && <LinkButton external kind="primary" href={page.web_url}>افتحي الوصفة في OneNote ↗</LinkButton>}
           <Button kind="plain" onClick={toggleFavorite}>{favorite ? '★ في المفضلة' : '☆ أضف للمفضلة'}</Button>
           {canEdit && !inTrash && <LinkButton href={href.edit(id)}>{page ? 'الوسوم والتخطيط' : 'تعديل'}</LinkButton>}
@@ -213,9 +216,36 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         </Section>
       )}
 
+      {doc.steps.length > 0 && (
+        <Section title="الطريقة">
+          <ol className="flex list-decimal flex-col gap-2 ps-5 marker:font-semibold marker:text-muted">
+            {doc.steps.map((step) => (
+              <li key={step.order} dir="auto" className="leading-relaxed">{step.text}</li>
+            ))}
+          </ol>
+        </Section>
+      )}
+
+      {doc.notes.length > 0 && (
+        <Section title={doc.status === 'note_only' ? 'الملاحظة' : 'ملاحظاتي'}>
+          <ul className="flex flex-col gap-1.5">
+            {doc.notes.map((note, i) => (
+              <li key={i} dir="auto" className="leading-relaxed">{note}</li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      {doc.raw_text && doc.status !== 'link_only' && (
+        <details open={doc.steps.length === 0 && doc.notes.length === 0} className="rounded-3xl bg-surface p-4 shadow-sm ring-1 ring-line">
+          <summary className="cursor-pointer font-medium">النص الكامل كما في OneNote</summary>
+          <p dir="auto" className="mt-3 whitespace-pre-line text-sm leading-relaxed">{doc.raw_text}</p>
+        </details>
+      )}
+
       {page?.web_url && (
         <p className="text-sm text-muted">
-          الطريقة والملاحظات في OneNote: <a href={page.web_url} target="_blank" rel="noreferrer" className="text-accent underline">افتحي الصفحة</a>.
+          للتعديل: <a href={page.web_url} target="_blank" rel="noreferrer" className="text-accent underline">افتحي الصفحة في OneNote</a>.
         </p>
       )}
 

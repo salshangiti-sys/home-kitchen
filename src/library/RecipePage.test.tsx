@@ -58,24 +58,32 @@ describe('a recipe in the app', () => {
     expect(screen.getByText('سجل التجارب')).toBeTruthy()
   })
 
-  it('does not show the method, the notes, the original text, the source, the version history or cook mode', async () => {
+  it('shows the method, the notes, the full OneNote text and cook mode, read-only', async () => {
     api.loadRecipe.mockResolvedValue(loaded(SALAD))
     render(<RecipePage id="salads-007" canEdit userId="u1" />)
     await screen.findByRole('heading', { name: 'سلطة خضراء' })
-    expect(screen.queryByText('نغسل الخضار')).toBeNull() // the method
-    expect(screen.queryByText('أزيد الليمون شوي')).toBeNull() // my notes
-    expect(screen.queryByText(/النص الأصلي/)).toBeNull()
-    expect(screen.queryByText(/mixed leaves\n/)).toBeNull()
-    expect(screen.queryByText('فيديو تيك توك')).toBeNull() // the source link
+    expect(screen.getByRole('heading', { name: 'الطريقة' })).toBeTruthy()
+    expect(screen.getByText('نغسل الخضار')).toBeTruthy() // the method
+    expect(screen.getByText('أزيد الليمون شوي')).toBeTruthy() // my notes
+    expect(screen.getByText('النص الكامل كما في OneNote')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'وضع الطبخ' }).getAttribute('href')).toBe('#/r/salads-007/cook')
+    // still hidden: the source link and the version history
+    expect(screen.queryByText('فيديو تيك توك')).toBeNull()
     expect(screen.queryByText('الإصدارات السابقة')).toBeNull()
-    expect(screen.queryByRole('link', { name: 'وضع الطبخ' })).toBeNull()
-    expect(screen.queryByText(/صور أو فيديو لم يُنقل|صورة أو فيديو لم يُنقل/)).toBeNull()
   })
 
-  it('points to OneNote for the method and notes', async () => {
+  it('opens the full text by itself when the page has no parsed method or notes', async () => {
+    api.loadRecipe.mockResolvedValue(loaded({ ...SALAD, steps: [], notes: [] }))
+    const { container } = render(<RecipePage id="salads-007" canEdit={false} userId="u1" />)
+    await screen.findByRole('heading', { name: 'سلطة خضراء' })
+    expect(screen.queryByRole('heading', { name: 'الطريقة' })).toBeNull()
+    expect(container.querySelector('details')?.hasAttribute('open')).toBe(true)
+  })
+
+  it('points to the OneNote page for editing', async () => {
     api.loadRecipe.mockResolvedValue(loaded(SALAD))
     render(<RecipePage id="salads-007" canEdit={false} userId="u1" />)
-    const pointer = await screen.findByText(/الطريقة والملاحظات في OneNote/)
+    const pointer = await screen.findByText(/للتعديل/)
     expect(pointer.querySelector('a')?.getAttribute('href')).toBe('https://onenote.example/page')
   })
 
