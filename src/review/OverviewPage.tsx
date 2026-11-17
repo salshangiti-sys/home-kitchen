@@ -124,7 +124,7 @@ function Row({ row, open, busy, error, actions }: { row: OverviewRow; open: bool
             {row.ingredientsFromApp ? (
               <>تُعدَّل من شاشة <a href={href.ingredients} className="underline">المقادير</a>.</>
             ) : (
-              'تُعدَّل في صفحة الوصفة في OneNote (لا يغيّر التطبيق صفحاتكِ).'
+              'تُعدَّل في صفحة الوصفة في OneNote (لا يغيّر التطبيق صفحاتكِ)، ثم اضغطي «اقرئيها من OneNote الآن» لتظهر هنا.'
             )}
           </p>
         </section>
@@ -134,6 +134,7 @@ function Row({ row, open, busy, error, actions }: { row: OverviewRow; open: bool
               اعتمدي
             </Button>
           )}
+          {row.pageUrl && !row.ingredientsFromApp && <LinkButton external href={row.pageUrl}>عدّلي المقادير في OneNote ↗</LinkButton>}
           <Button kind="plain" disabled={busy} onClick={actions.onRefresh}>اقرئيها من OneNote الآن</Button>
           <LinkButton href={href.recipe(row.id)}>افتحي الوصفة</LinkButton>
         </div>
