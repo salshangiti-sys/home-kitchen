@@ -13,6 +13,7 @@ const data: OverviewData = {
   suggestions: [{ recipe_id: 'b', position: 1, text: '٢٤ اوريو' }],
   templates: [{ id: 't1', recipe_id: 'a', kind: 'wash_chop', timing: 'before_cooking', at_time: null, body: 'تقطيع الخضار: بصل، جزر (مبشور)', position: 1 }],
   groups: [{ recipe_id: 'a', food_group: 'dairy' }],
+  pages: [{ recipe_id: 'a', web_url: 'https://onenote.example/a' }],
 }
 const page = { page_id: 'p1', title: 'كبسة الروبيان', section_name: 'أرزاز ومكرونات (سمك)', web_url: 'https://onenote.example/p1' }
 
@@ -78,6 +79,9 @@ describe('the review page', () => {
     expect(screen.getByText(/بلا طريقة تقطيع: بصل\./)).toBeTruthy()
     expect(screen.getByText('٢٤ اوريو')).toBeTruthy() // the ones she confirmed in the app
     expect(screen.getAllByRole('link', { name: 'افتحي الوصفة' })[0].getAttribute('href')).toBe('#/r/a')
+    // the page's own ingredient lines are edited in OneNote: a link opens the page
+    expect(screen.getAllByRole('link', { name: /عدّلي المقادير في OneNote/ })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: /عدّلي المقادير في OneNote/ }).getAttribute('href')).toBe('https://onenote.example/a')
   })
 
   it('narrows the list by what is missing', async () => {
