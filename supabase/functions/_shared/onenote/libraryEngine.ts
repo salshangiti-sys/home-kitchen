@@ -209,8 +209,9 @@ export async function checkLibrary(deps: LibraryDeps, refreshLimit = 5, budgetMs
   const fresh: Library = { ...library, sections: await placeSections(graph, library) }
   await store.saveLibrary(fresh)
 
-  const pages: PageMeta[] = []
-  for (const section of fresh.sections) pages.push(...(await graph.listSectionPages(section.id)))
+  // The sections are listed side by side: one after the other took about 70 seconds on 2026-11-18
+  // (13 sections), which left time for a single page read per run.
+  const pages: PageMeta[] = (await Promise.all(fresh.sections.map((section) => graph.listSectionPages(section.id)))).flat()
   const listed = new Map(pages.map((page) => [page.id, page]))
 
   const links = await store.links()

@@ -237,6 +237,23 @@ describe('the recipe notebook is read and created in, never edited', () => {
     expect(second.waiting).toBe(0)
   })
 
+  it('lists the sections side by side, not one after the other', async () => {
+    await connectLibrary(deps, 'nb-real')
+    let running = 0
+    let most = 0
+    const list = onenote.listSectionPages.bind(onenote)
+    onenote.listSectionPages = async (id: string) => {
+      running += 1
+      most = Math.max(most, running)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      const pages = await list(id)
+      running -= 1
+      return pages
+    }
+    await checkLibrary(deps, 0)
+    expect(most).toBeGreaterThan(1) // the notebook has more than one section
+  })
+
   it('stops starting new reads once the time budget is spent (always reading at least one)', async () => {
     await connectLibrary(deps, 'nb-real')
     for (const title of ['أ', 'ب', 'ج', 'د']) await addPage(deps, (await onenote.createPage('sec-rice', page(title, '<p>نص</p>'))).id)
