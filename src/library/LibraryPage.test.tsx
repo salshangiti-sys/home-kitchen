@@ -127,6 +127,18 @@ describe('tagging many recipes', () => {
 
 const openFilters = async () => fireEvent.click(await screen.findByRole('button', { name: /تصفية أكثر/ }))
 
+describe('a page with no tidy ingredient list', () => {
+  it('is a recipe like the others: no «ملاحظة» badge and no such filter', async () => {
+    recipes = [recipe('n1', 'بوريك لحم', 'أطباق جانبية', { status: 'note_only' }), recipe('p1', 'سلطة ناقصة', 'سلطات', { status: 'partial' })]
+    render(<LibraryPage canEdit />)
+    await screen.findByText('بوريك لحم')
+    expect(screen.queryByText('ملاحظة')).toBeNull()
+    expect(screen.getByText('ناقصة')).toBeTruthy() // the others keep theirs
+    await openFilters()
+    expect(screen.queryByRole('button', { name: 'ملاحظة' })).toBeNull()
+  })
+})
+
 describe('using the cooking history', () => {
   const titles = () => screen.getAllByRole('link').map((a) => a.textContent ?? '').filter((t) => /سلطة|شوربة/.test(t))
 
