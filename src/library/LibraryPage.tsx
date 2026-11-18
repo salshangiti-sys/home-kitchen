@@ -14,7 +14,7 @@ import { PROTEINS, PROTEIN_LABELS, loadIngredientLines, mainIngredients, type Pr
 import BulkTagPanel from './BulkTagPanel'
 import { tintFor } from '../tints'
 import { useLessonsVersion } from '../shopping/LessonsContext'
-import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeStatus } from './types'
+import { displayStatus, MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
 
 const STATUS_ICONS: Record<RecipeStatus, string> = { complete: '🍽', partial: '📝', link_only: '🔗', note_only: '🗒' }
@@ -72,7 +72,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
     const matching = data.recipes.filter(
       (r) =>
         (!section || (sub ? r.section === `${section}${SECTION_SEPARATOR}${sub}` : inSection(r.section, section))) &&
-        (!status || r.status === status) &&
+        (!status || displayStatus(r.status) === status) &&
         (!onlyFavorites || data.favorites.has(r.id)) &&
         (!onlyFlagged || data.openFlags.has(r.id)) &&
         (!onlyNeverCooked || !stats?.has(r.id)) &&
@@ -173,7 +173,7 @@ export default function LibraryPage({ canEdit }: { canEdit: boolean }) {
         <button type="button" className={chip(onlyFavorites)} onClick={() => setOnlyFavorites(!onlyFavorites)}>
           ★ المفضلة
         </button>
-        {(Object.keys(STATUS_LABELS) as RecipeStatus[]).map((s) => (
+        {(Object.keys(STATUS_LABELS) as RecipeStatus[]).filter((s) => s !== 'note_only').map((s) => (
           <button key={s} type="button" className={chip(status === s)} onClick={() => setStatus(status === s ? null : s)}>
             {STATUS_LABELS[s]}
           </button>
@@ -287,7 +287,7 @@ function RecipeRow({ recipe, cover, favorite, flagged, cooked }: { recipe: Recip
         {cover ? (
           <img src={cover} alt="" loading="lazy" className="size-14 shrink-0 rounded-2xl object-cover" />
         ) : (
-          <span aria-hidden className={`grid size-14 shrink-0 place-items-center rounded-2xl text-2xl ${tintFor(recipe.section)}`}>{STATUS_ICONS[recipe.status]}</span>
+          <span aria-hidden className={`grid size-14 shrink-0 place-items-center rounded-2xl text-2xl ${tintFor(recipe.section)}`}>{STATUS_ICONS[displayStatus(recipe.status)]}</span>
         )}
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span dir="auto" className="truncate text-base font-semibold">{recipe.title}</span>
@@ -301,7 +301,7 @@ function RecipeRow({ recipe, cover, favorite, flagged, cooked }: { recipe: Recip
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
           {favorite && <span aria-label="مفضلة" className="text-lg text-amber-500">★</span>}
-          {recipe.status !== 'complete' && <Badge tone={recipe.status === 'partial' ? 'warn' : 'plain'}>{STATUS_LABELS[recipe.status]}</Badge>}
+          {displayStatus(recipe.status) !== 'complete' && <Badge tone={recipe.status === 'partial' ? 'warn' : 'plain'}>{STATUS_LABELS[displayStatus(recipe.status)]}</Badge>}
           {flagged && <Badge tone="warn">مراجعة</Badge>}
         </span>
       </a>

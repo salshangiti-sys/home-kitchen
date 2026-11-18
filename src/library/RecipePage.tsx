@@ -23,7 +23,7 @@ import { useLessonsVersion } from '../shopping/LessonsContext'
 import PhotoGallery from '../photos/PhotoGallery'
 import { loadRecipePage, refreshFromPage, timeAgo, type RecipePage as PageLink } from './onenote'
 import { safeHref } from './safeUrl'
-import { MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeDoc } from './types'
+import { displayStatus, MEAL_TYPE_LABELS, STATUS_LABELS, type RecipeDoc } from './types'
 
 const PLATFORM_LABELS: Record<string, string> = {
   tiktok: 'تيك توك',
@@ -133,7 +133,7 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
         <h2 dir="auto" className="text-2xl font-bold leading-snug">{doc.title}</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Badge tint={doc.category.section}>{doc.category.section}</Badge>
-          {doc.status !== 'complete' && <Badge tone={doc.status === 'partial' ? 'warn' : 'plain'}>{STATUS_LABELS[doc.status]}</Badge>}
+          {displayStatus(doc.status) !== 'complete' && <Badge tone={doc.status === 'partial' ? 'warn' : 'plain'}>{STATUS_LABELS[displayStatus(doc.status)]}</Badge>}
           {doc.tags?.meal_types?.map((type) => <Badge key={type} tone="accent">{MEAL_TYPE_LABELS[type]}</Badge>)}
           {doc.tags?.kid_friendly && <Badge tone="accent">مناسبة للأطفال</Badge>}
           {doc.tags?.lunchbox && <Badge tone="accent">لانش بوكس</Badge>}
@@ -227,7 +227,7 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
       )}
 
       {doc.notes.length > 0 && (
-        <Section title={doc.status === 'note_only' ? 'الملاحظة' : 'ملاحظاتي'}>
+        <Section title="ملاحظاتي">
           <ul className="flex flex-col gap-1.5">
             {doc.notes.map((note, i) => (
               <li key={i} dir="auto" className="leading-relaxed">{note}</li>
