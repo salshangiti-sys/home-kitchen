@@ -61,6 +61,18 @@ describe('one row per recipe', () => {
     expect(draft.find((r) => r.id === 'a')?.awaiting).toEqual(['f7'])
   })
 
+  it('lists a recipe\'s prep by kind, not by when it was written', () => {
+    const mixed = buildOverview({
+      ...data,
+      templates: [
+        { id: 'x1', recipe_id: 'a', kind: 'other', timing: 'before_cooking', at_time: null, body: 'أخرى', position: 1 },
+        { id: 'x2', recipe_id: 'a', kind: 'dough', timing: 'before_cooking', at_time: null, body: 'عجينة', position: 2 },
+        { id: 'x3', recipe_id: 'a', kind: 'defrost', timing: 'morning', at_time: null, body: 'إذابة', position: 3 },
+      ],
+    })
+    expect(mixed.find((r) => r.id === 'a')?.prep.map((p) => p.id)).toEqual(['x3', 'x2', 'x1'])
+  })
+
   it('says what each recipe is still missing', () => {
     expect(byId('a').problems).toEqual(['cut_missing'])
     expect(byId('a').uncut).toEqual(['جزر', 'فلفل رومي'])

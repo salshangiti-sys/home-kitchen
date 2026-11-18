@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { KINDS, KIND_LABELS, groupNow, overlayTicks, prepMessage, shortTime, sortTasks, suggestPrep, type Task } from './api'
+import { KINDS, KIND_LABELS, groupNow, sortByKind, overlayTicks, prepMessage, shortTime, sortTasks, suggestPrep, type Task } from './api'
 
 const task = (id: string, day: string, timing: Task['timing'], at_time: string | null = null, extra: Partial<Task> = {}): Task => ({
   id,
@@ -22,6 +22,25 @@ describe('the kinds of prep task', () => {
     expect(KIND_LABELS.garnish).toBe('للزينة')
     for (const kind of KINDS) expect(KIND_LABELS[kind]).toBeTruthy()
   })
+
+  it('lists them thawing, chopping, seasoning, dough, sauces, garnish, then the rest', () => {
+    expect(KINDS).toEqual(['defrost', 'wash_chop', 'marinade', 'dough', 'sauce', 'garnish', 'other'])
+    expect(KIND_LABELS.dough).toBe('العجينة')
+  })
+
+  it('sorts a recipe\'s tasks by kind, keeping the written order inside a kind', () => {
+    const items = [
+      { id: 'o', kind: 'other' as const, position: 1 },
+      { id: 'g', kind: 'garnish' as const, position: 2 },
+      { id: 's2', kind: 'sauce' as const, position: 4 },
+      { id: 's1', kind: 'sauce' as const, position: 3 },
+      { id: 'd', kind: 'dough' as const, position: 5 },
+      { id: 'm', kind: 'marinade' as const, position: 6 },
+      { id: 'w', kind: 'wash_chop' as const, position: 7 },
+      { id: 'f', kind: 'defrost' as const, position: 8 },
+    ]
+    expect(sortByKind(items).map((i) => i.id)).toEqual(['f', 'w', 'm', 'd', 's1', 's2', 'g', 'o'])
+  })
 })
 
 describe('sortTasks', () => {
@@ -35,6 +54,16 @@ describe('sortTasks', () => {
       task('yesterday', '2026-11-13', 'before_cooking'),
     ]
     expect(sortTasks(tasks).map((t) => t.id)).toEqual(['yesterday', 'morning', 'noon', 'five', 'cook', 'tonight'])
+  })
+
+  it('puts tasks of the same time in kind order, thawing first and «أخرى» last', () => {
+    const tasks = [
+      task('other', '2026-11-14', 'before_cooking', null, { kind: 'other', position: 1 }),
+      task('sauce', '2026-11-14', 'before_cooking', null, { kind: 'sauce', position: 2 }),
+      task('chop', '2026-11-14', 'before_cooking', null, { kind: 'wash_chop', position: 3 }),
+      task('thaw', '2026-11-14', 'before_cooking', null, { kind: 'defrost', position: 4 }),
+    ]
+    expect(sortTasks(tasks).map((t) => t.id)).toEqual(['thaw', 'chop', 'sauce', 'other'])
   })
 
   it('does not change the list it was given', () => {
