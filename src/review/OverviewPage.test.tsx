@@ -16,13 +16,14 @@ const data: OverviewData = {
 }
 const page = { page_id: 'p1', title: 'كبسة الروبيان', section_name: 'أرزاز ومكرونات (سمك)', web_url: 'https://onenote.example/p1' }
 
-type Fake = OverviewApi & { approved: string[]; reviewed: string[]; edits: string[]; failWith?: string }
+type Fake = OverviewApi & { approved: string[]; reviewed: string[]; reviewedNow: string[]; edits: string[]; failWith?: string }
 
 function fakeApi(pending: Pending = { pages: [], checkedAt: null }): Fake {
-  const state = { pending, approved: [] as string[], reviewed: [] as string[], edits: [] as string[] }
+  const state = { pending, approved: [] as string[], reviewed: [] as string[], reviewedNow: [] as string[], edits: [] as string[] }
   const fake: Fake = {
     approved: state.approved,
     reviewed: state.reviewed,
+    reviewedNow: state.reviewedNow,
     edits: state.edits,
     setTags: async (id, tags) => {
       if (fake.failWith) throw new Error(fake.failWith)
@@ -41,6 +42,9 @@ function fakeApi(pending: Pending = { pages: [], checkedAt: null }): Fake {
     },
     approveRecipes: async (ids) => {
       state.reviewed.push(...ids)
+    },
+    approveOne: async (id) => {
+      state.reviewedNow.push(id)
     },
     loadOverview: async () => data,
     loadPending: async () => state.pending,
@@ -158,6 +162,16 @@ describe('recipes waiting for her approval', () => {
     fireEvent.click(screen.getByRole('button', { name: 'اعتمدي' }))
     await waitFor(() => expect(fake.reviewed).toEqual(['f9']))
     expect(await screen.findByText('اعتُمدت «حلا الاوريو».')).toBeTruthy()
+  })
+
+  it('a recipe that never had a flag can be approved too', async () => {
+    const fake = fakeApi()
+    render(<OverviewPage api={fake} />)
+    const card = (await screen.findByText('إيدام دجاج بالكريمة')).closest('details') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: 'اعتمدي' }))
+    await waitFor(() => expect(fake.reviewedNow).toEqual(['a']))
+    expect(fake.reviewed).toEqual([]) // no flag to mark
+    expect(await screen.findByText('اعتُمدت «إيدام دجاج بالكريمة».')).toBeTruthy()
   })
 
   it('approves everything shown only after she confirms', async () => {

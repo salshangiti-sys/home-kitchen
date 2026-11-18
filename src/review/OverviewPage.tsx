@@ -8,7 +8,7 @@ import { href } from '../router'
 import { Badge, Button, Card, LinkButton, Notice } from '../ui'
 import { addPageAsRecipe, checkNotebook, listUnlinked, loadLibrary, refreshFromPage, timeAgo, type CheckSummary, type UnlinkedPage } from '../library/onenote'
 import { sectionsOf } from '../library/sections'
-import { loadRecipe, saveRecipe, setFlagStatus } from '../library/api'
+import { approveRecipe, loadRecipe, saveRecipe, setFlagStatus } from '../library/api'
 import { autofillRecipe } from './apply'
 import type { Autofill } from './autofill'
 import { removeTemplate, saveTemplate, type TemplateInput } from '../prep/api'
@@ -25,6 +25,7 @@ export interface OverviewApi {
   loadPending: () => Promise<Pending>
   approve: (pageId: string) => Promise<{ recipeId: string; filled: Autofill | null }> // makes the recipe, and fills in a starting set
   approveRecipes: (flagIds: string[]) => Promise<void> // she has reviewed these recipes
+  approveOne: (recipeId: string) => Promise<void> // the same, for a recipe that has no waiting flag
   checkNow: () => Promise<CheckSummary>
   refreshFromOneNote: (recipeId: string) => Promise<{ status: 'ok' | 'missing' | 'error'; error: string | null }> // reads the recipe's page now
   setTags: (recipeId: string, tags: string[]) => Promise<void>
@@ -46,6 +47,7 @@ const real: OverviewApi = {
   approveRecipes: async (flagIds) => {
     for (const id of flagIds) await setFlagStatus(id, 'reviewed')
   },
+  approveOne: approveRecipe,
   checkNow: checkNotebook,
   refreshFromOneNote: refreshFromPage,
   setTags: async (recipeId, tags) => {
@@ -69,6 +71,7 @@ const chip = (active: boolean) => `min-h-9 shrink-0 rounded-full border px-3 tex
 
 interface RowActions {
   onApprove: (flagIds: string[]) => void
+  onApproveOne: () => void
   onTags: (tags: string[]) => void
   onSaveTask: (id: string, task: TemplateInput) => void
   onRemoveTask: (id: string) => void
@@ -123,6 +126,11 @@ function Row({ row, open, busy, error, actions }: { row: OverviewRow; open: bool
         <div className="flex flex-wrap gap-2">
           {row.awaiting.length > 0 && (
             <Button disabled={busy} onClick={() => actions.onApprove(row.awaiting)}>
+              اعتمدي
+            </Button>
+          )}
+          {row.awaiting.length === 0 && !row.approved && (
+            <Button disabled={busy} onClick={actions.onApproveOne}>
               اعتمدي
             </Button>
           )}
@@ -404,6 +412,11 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
                 onApprove: (flagIds) =>
                   void act(async () => {
                     await api.approveRecipes(flagIds)
+                    return { text: `اعتُمدت «${row.title}».` }
+                  }),
+                onApproveOne: () =>
+                  void act(async () => {
+                    await api.approveOne(row.id)
                     return { text: `اعتُمدت «${row.title}».` }
                   }),
                 onTags: (tags) =>

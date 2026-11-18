@@ -49,6 +49,9 @@ const PAGE = 1000 // the most rows one request returns
 // page, given a starting set of tags, prep tasks and food groups by the app, or written as a draft
 // (quantities and steps are the app's estimate) such as the starter «مفرزنات» recipes.
 export const AWAITING_FLAGS = ['added_from_onenote', 'auto_filled', 'draft_by_app'] as const
+// Recorded (already reviewed) when she approves a recipe that never had a waiting flag.
+export const OWNER_REVIEWED = 'owner_reviewed'
+const REVIEW_FLAGS = [...AWAITING_FLAGS, OWNER_REVIEWED]
 
 type Page = PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
 
@@ -66,7 +69,7 @@ export const loadOverview = (): Promise<OverviewData> =>
   readThrough('overview', async () => {
     const [recipes, flags, lines, suggestions, templates, pages] = await Promise.all([
       fetchAll<OverviewRecipe>((a, b) => supabase.from('recipes').select('id,title,section,custom_tags').is('deleted_at', null).order('id').range(a, b)),
-      fetchAll<OverviewFlag>((a, b) => supabase.from('recipe_flags').select('id,recipe_id,flag,status').in('flag', [...AWAITING_FLAGS]).order('id').range(a, b)),
+      fetchAll<OverviewFlag>((a, b) => supabase.from('recipe_flags').select('id,recipe_id,flag,status').in('flag', REVIEW_FLAGS).order('id').range(a, b)),
       fetchAll<Line>((a, b) => supabase.from('recipe_ingredients').select('recipe_id,position,text').order('recipe_id').order('position').range(a, b)),
       fetchAll<Line>((a, b) => supabase.from('recipe_ingredient_suggestions').select('recipe_id,position,text').eq('status', 'confirmed').order('recipe_id').order('position').range(a, b)),
       fetchAll<OverviewTemplate>((a, b) => supabase.from('recipe_prep_templates').select('id,recipe_id,kind,timing,at_time,body,position').order('recipe_id').order('position').order('id').range(a, b)),
@@ -144,7 +147,7 @@ export function buildOverview(data: OverviewData): OverviewRow[] {
     const tasks = (templates.get(recipe.id) ?? []).sort((a, b) => a.position - b.position)
     const uncut = tasks.flatMap((t) => uncutVegetables(t.body))
     const tags = recipe.custom_tags ?? []
-    const theirFlags = (flags.get(recipe.id) ?? []).filter((f) => (AWAITING_FLAGS as readonly string[]).includes(f.flag))
+    const theirFlags = (flags.get(recipe.id) ?? []).filter((f) => REVIEW_FLAGS.includes(f.flag))
     const awaiting = theirFlags.filter((f) => f.status === 'open').map((f) => f.id)
     const approved = awaiting.length === 0 && theirFlags.length > 0
     const problems: Problem[] = []

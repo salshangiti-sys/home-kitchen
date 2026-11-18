@@ -78,6 +78,12 @@ describe('one row per recipe', () => {
     expect(filterRows(rows, { ...none, query: 'اوريو' }).map((r) => r.id)).toContain('b') // a search finds it anyway
   })
 
+  it('approving a recipe that had no flag records one, and that counts as approved', () => {
+    const done = buildOverview({ ...data, flags: [...data.flags, { id: 'f8', recipe_id: 'a', flag: 'owner_reviewed', status: 'reviewed' }] })
+    expect(done.find((r) => r.id === 'a')?.approved).toBe(true)
+    expect(done.find((r) => r.id === 'a')?.problems).toEqual([])
+  })
+
   it('a recipe waits for approval while its added-from-OneNote or auto-filled flag is open', () => {
     expect(byId('c').awaiting).toEqual(['f1'])
     expect(byId('b').awaiting).toEqual([]) // its flag is already reviewed

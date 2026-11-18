@@ -151,6 +151,12 @@ export async function setFlagStatus(flagId: string, status: 'open' | 'reviewed')
   fail(error)
 }
 
+// Approves a recipe that has no waiting flag (an original import): records that she reviewed it.
+export async function approveRecipe(recipeId: string): Promise<void> {
+  const { error } = await supabase.rpc('approve_recipe', { p_recipe_id: recipeId })
+  fail(error)
+}
+
 export async function importBatch(docs: RecipeDoc[], dryRun: boolean): Promise<ImportOutcome[]> {
   const { data, error } = await supabase.rpc('import_recipes', { p_docs: docs, p_dry_run: dryRun })
   fail(error)
