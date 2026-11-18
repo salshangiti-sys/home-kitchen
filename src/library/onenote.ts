@@ -98,6 +98,24 @@ export async function loadLibrary(): Promise<LibraryInfo | null> {
   return data as LibraryInfo | null
 }
 
+// Pages she chose to ignore (not recipes), kept on the library row.
+export async function listIgnored(): Promise<Array<{ page_id: string; title: string }>> {
+  const { data, error } = await supabase.from('onenote_library').select('ignored_pages').maybeSingle()
+  if (error) throw new Error(error.message)
+  const pages = (data?.ignored_pages ?? {}) as Record<string, string>
+  return Object.entries(pages).map(([page_id, title]) => ({ page_id, title }))
+}
+
+export async function ignorePage(pageId: string): Promise<void> {
+  const { error } = await supabase.rpc('ignore_onenote_page', { p_page_id: pageId })
+  if (error) throw new Error(error.message)
+}
+
+export async function unignorePage(pageId: string): Promise<void> {
+  const { error } = await supabase.rpc('unignore_onenote_page', { p_page_id: pageId })
+  if (error) throw new Error(error.message)
+}
+
 export async function loadRecipePage(recipeId: string): Promise<RecipePage | null> {
   const { data, error } = await supabase
     .from('recipe_pages')
