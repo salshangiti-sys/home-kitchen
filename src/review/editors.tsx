@@ -12,7 +12,7 @@ const SMALL = 'min-h-9 rounded-full border px-3 text-sm disabled:opacity-50'
 const MAX_TAG = 40
 
 // Tags she uses often, offered as one-tap chips so she does not type them on the phone.
-export const SUGGESTED_TAGS = ['دجاج', 'صدور دجاج', 'دجاج مفتفت', 'لحم مفروم', 'لحم كبير', 'كفتة', 'سريع', 'سناك/خفايف'] as const
+export const SUGGESTED_TAGS = ['دجاج', 'صدور دجاج', 'دجاج مفتفت', 'لحم مفروم', 'لحم كبير', 'كفتة', 'سريع', 'سناك/خفايف', 'تجهيز مُسبق'] as const
 
 export function TagsEditor({ tags, busy, onChange }: { tags: string[]; busy: boolean; onChange: (tags: string[]) => void }) {
   const [draft, setDraft] = useState('')
