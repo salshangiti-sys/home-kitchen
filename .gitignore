@@ -24,3 +24,7 @@ test-results/
 .vscode/
 .idea/
 *.tsbuildinfo
+
+# Playwright
+test-results/
+playwright-report/
