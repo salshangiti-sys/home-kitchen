@@ -24,7 +24,9 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned (not ubuntu-latest): Playwright supports specific Ubuntu versions only, and the latest
+    # label moved to 26.04, which Playwright 1.56 cannot install a browser on.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Public values (see above). The app reads them as soon as it loads, in the tests as well.
     env:
