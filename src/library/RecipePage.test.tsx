@@ -6,7 +6,6 @@ import type { RecipePage as PageLink } from './onenote'
 
 // The page's own pieces are tested elsewhere; here only what the page itself shows or hides.
 vi.mock('../history/CookHistory', () => ({ default: () => <p>سجل التجارب</p> }))
-vi.mock('../nutrition/FoodGroups', () => ({ default: () => <p>العناصر الغذائية</p> }))
 vi.mock('../prep/PrepTemplates', () => ({ default: () => <p>تجهيزات الوصفة</p> }))
 vi.mock('../plan/AddToPlan', () => ({ default: () => <p>إضافة إلى الخطة</p> }))
 vi.mock('../photos/PhotoGallery', () => ({ default: () => <p>الصور</p> }))
@@ -53,7 +52,7 @@ describe('a recipe in the app', () => {
     const open = await screen.findByRole('link', { name: 'افتحي الوصفة في OneNote ↗' })
     expect(open.getAttribute('href')).toBe('https://onenote.example/page')
     // planning and history stay
-    expect(screen.getByText('العناصر الغذائية')).toBeTruthy()
+    expect(screen.queryByText('العناصر الغذائية')).toBeNull() // hidden from the recipe page; the data stays
     expect(screen.getByText('تجهيزات الوصفة')).toBeTruthy()
     expect(screen.getByText('سجل التجارب')).toBeTruthy()
   })

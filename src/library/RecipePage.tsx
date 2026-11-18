@@ -13,7 +13,6 @@ import { Badge, Button, LinkButton, Notice } from '../ui'
 import { loadRecipe, restoreRecipe, setFavorite, setFlagStatus, trashRecipe, type LoadedRecipe } from './api'
 import { explain } from '../offline/readThrough'
 import CookHistory from '../history/CookHistory'
-import FoodGroups from '../nutrition/FoodGroups'
 import PrepTemplates from '../prep/PrepTemplates'
 import { loadSuggestions, usableIngredients, type Suggestion } from '../ingredients/api'
 import { orderByRole } from '../shopping/roles'
@@ -250,8 +249,6 @@ export default function RecipePage({ id, canEdit, userId, startLogging = false }
       )}
 
       {canEdit && !inTrash && <AddToPlan recipeId={id} title={doc.title} />}
-
-      <FoodGroups recipeId={id} canEdit={canEdit && !inTrash} />
 
       <PrepTemplates recipeId={id} canEdit={canEdit && !inTrash} ingredientLines={used.lines} />
 
