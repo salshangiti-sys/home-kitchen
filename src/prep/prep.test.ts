@@ -23,8 +23,8 @@ describe('the kinds of prep task', () => {
     for (const kind of KINDS) expect(KIND_LABELS[kind]).toBeTruthy()
   })
 
-  it('lists them thawing, chopping, seasoning, dough, sauces, garnish, then the rest', () => {
-    expect(KINDS).toEqual(['defrost', 'wash_chop', 'marinade', 'dough', 'sauce', 'garnish', 'other'])
+  it('lists them thawing, dough, chopping, seasoning, sauces, garnish, then the rest', () => {
+    expect(KINDS).toEqual(['defrost', 'dough', 'wash_chop', 'marinade', 'sauce', 'garnish', 'other'])
     expect(KIND_LABELS.dough).toBe('العجينة')
   })
 
@@ -39,7 +39,7 @@ describe('the kinds of prep task', () => {
       { id: 'w', kind: 'wash_chop' as const, position: 7 },
       { id: 'f', kind: 'defrost' as const, position: 8 },
     ]
-    expect(sortByKind(items).map((i) => i.id)).toEqual(['f', 'w', 'm', 'd', 's1', 's2', 'g', 'o'])
+    expect(sortByKind(items).map((i) => i.id)).toEqual(['f', 'd', 'w', 'm', 's1', 's2', 'g', 'o'])
   })
 })
 
