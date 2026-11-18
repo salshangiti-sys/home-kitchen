@@ -9,10 +9,10 @@ import { normalizeAr } from '../library/normalize'
 import { addDays } from '../plan/dates'
 import { registerHandler, type Op } from '../offline/outbox'
 
-export type PrepKind = 'defrost' | 'wash_chop' | 'marinade' | 'sauce' | 'other'
+export type PrepKind = 'defrost' | 'wash_chop' | 'marinade' | 'sauce' | 'garnish' | 'other'
 export type PrepTiming = 'night_before' | 'morning' | 'before_cooking' | 'at_time'
 
-export const KINDS: PrepKind[] = ['defrost', 'wash_chop', 'marinade', 'sauce', 'other']
+export const KINDS: PrepKind[] = ['defrost', 'wash_chop', 'marinade', 'sauce', 'garnish', 'other']
 export const TIMINGS: PrepTiming[] = ['night_before', 'morning', 'before_cooking', 'at_time']
 
 export const KIND_LABELS: Record<PrepKind, string> = {
@@ -20,6 +20,7 @@ export const KIND_LABELS: Record<PrepKind, string> = {
   wash_chop: 'غسل وتقطيع',
   marinade: 'بهارات وتتبيلة',
   sauce: 'صوص وحشوات',
+  garnish: 'للزينة',
   other: 'أخرى',
 }
 

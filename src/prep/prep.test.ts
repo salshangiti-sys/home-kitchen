@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupNow, overlayTicks, prepMessage, shortTime, sortTasks, suggestPrep, type Task } from './api'
+import { KINDS, KIND_LABELS, groupNow, overlayTicks, prepMessage, shortTime, sortTasks, suggestPrep, type Task } from './api'
 
 const task = (id: string, day: string, timing: Task['timing'], at_time: string | null = null, extra: Partial<Task> = {}): Task => ({
   id,
@@ -14,6 +14,14 @@ const task = (id: string, day: string, timing: Task['timing'], at_time: string |
   done_by: null,
   position: 1,
   ...extra,
+})
+
+describe('the kinds of prep task', () => {
+  it('has «للزينة» before «أخرى», and a label for each kind', () => {
+    expect(KINDS.indexOf('garnish')).toBe(KINDS.indexOf('other') - 1)
+    expect(KIND_LABELS.garnish).toBe('للزينة')
+    for (const kind of KINDS) expect(KIND_LABELS[kind]).toBeTruthy()
+  })
 })
 
 describe('sortTasks', () => {
