@@ -157,6 +157,19 @@ function categoryOf(fields: EditorFields, before: RecipeDoc | null): RecipeDoc['
 export const isFromOneNote = (doc: RecipeDoc) => Object.keys(doc.onenote).length > 0
 
 // The edited recipe. `before` is the stored recipe (null for a new one): its id, OneNote origin,
+// The tags written in the tags field (separated by «،» or «,»).
+export const splitTags = (text: string): string[] =>
+  text
+    .split(/[,،]/)
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+
+// Tapping a tag from the list of existing ones: off if it is in the field, on (at the end) if not.
+export function toggleTag(text: string, tag: string): string {
+  const tags = splitTags(text)
+  return (tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag]).join('، ')
+}
+
 // media placeholders, flags and original page text carry over unchanged.
 export function fieldsToDoc(fields: EditorFields, before: RecipeDoc | null): RecipeDoc {
   const sources = parseSources(fields.sources, before?.sources ?? [])
@@ -164,10 +177,7 @@ export function fieldsToDoc(fields: EditorFields, before: RecipeDoc | null): Rec
   const steps = lines(fields.steps).map((text, i) => ({ order: i + 1, text }))
   const notes = lines(fields.notes)
   const title = fields.title.trim()
-  const custom = fields.customTags
-    .split(/[,،]/)
-    .map((tag) => tag.trim())
-    .filter(Boolean)
+  const custom = splitTags(fields.customTags)
 
   return {
     id: before?.id ?? '',

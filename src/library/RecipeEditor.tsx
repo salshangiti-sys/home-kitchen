@@ -10,9 +10,10 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { href, navigate } from '../router'
+import { tintFor } from '../tints'
 import { Button, LinkButton, Notice } from '../ui'
 import { listRecipes, loadRecipe, saveRecipe } from './api'
-import { docToFields, emptyFields, fieldsToDoc, GROUP_PREFIX, isFromOneNote, planningToDoc, type EditorFields, type TriState } from './editorFields'
+import { docToFields, emptyFields, fieldsToDoc, GROUP_PREFIX, isFromOneNote, planningToDoc, splitTags, toggleTag, type EditorFields, type TriState } from './editorFields'
 import { createPage, libraryLabel, loadLibrary, loadRecipePage, type LibraryInfo, type RecipePage } from './onenote'
 import { MEAL_TYPE_LABELS, MEAL_TYPES, STATUS_LABELS, type RecipeDoc, type RecipeStatus } from './types'
 import { recipeErrors } from './validate'
@@ -21,6 +22,7 @@ export default function RecipeEditor({ id }: { id: string | null }) {
   const [before, setBefore] = useState<{ doc: RecipeDoc; version: number } | null>(null)
   const [fields, setFields] = useState<EditorFields | null>(id ? null : emptyFields())
   const [sections, setSections] = useState<string[]>([])
+  const [knownTags, setKnownTags] = useState<string[]>([]) // every tag some recipe already has, the most used first
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null)
   const [saving, setSaving] = useState(false)
   const [library, setLibrary] = useState<LibraryInfo | null | undefined>(undefined)
@@ -28,7 +30,12 @@ export default function RecipeEditor({ id }: { id: string | null }) {
   const [blank, setBlank] = useState(true)
 
   useEffect(() => {
-    listRecipes().then(({ recipes }) => setSections([...new Set(recipes.map((r) => r.section))].sort((a, b) => a.localeCompare(b, 'ar'))))
+    listRecipes().then(({ recipes }) => {
+      setSections([...new Set(recipes.map((r) => r.section))].sort((a, b) => a.localeCompare(b, 'ar')))
+      const counts = new Map<string, number>()
+      for (const r of recipes) for (const t of r.custom_tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1)
+      setKnownTags([...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ar')).map(([t]) => t))
+    })
     loadLibrary().then(setLibrary, () => setLibrary(null))
     if (!id) return
     loadRecipePage(id).then(setPage, () => setPage(null))
@@ -182,9 +189,28 @@ export default function RecipeEditor({ id }: { id: string | null }) {
           <Field label="التحضير (دقيقة)"><input inputMode="numeric" value={fields.prepTime} onChange={(e) => set('prepTime', e.target.value)} className={INPUT} /></Field>
           <Field label="الطبخ (دقيقة)"><input inputMode="numeric" value={fields.cookTime} onChange={(e) => set('cookTime', e.target.value)} className={INPUT} /></Field>
         </div>
-        <Field label="وسوم خاصة" hint="افصلي بينها بفاصلة، مثل: شتوي، سريع">
+        <Field label="وسوم خاصة" hint="اختاري من وسومكِ الموجودة أدناه، أو اكتبي وسمًا جديدًا وافصلي بينها بفاصلة">
           <input dir="auto" value={fields.customTags} onChange={(e) => set('customTags', e.target.value)} className={INPUT} />
         </Field>
+        {knownTags.length > 0 && (
+          <div role="group" aria-label="الوسوم الموجودة" className="flex flex-wrap gap-2">
+            {knownTags.map((tag) => {
+              const on = splitTags(fields.customTags).includes(tag)
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  dir="auto"
+                  aria-pressed={on}
+                  onClick={() => set('customTags', toggleTag(fields.customTags, tag))}
+                  className={`min-h-9 rounded-full px-3 text-sm font-medium ${on ? 'bg-accent text-on-accent' : tintFor(tag)}`}
+                >
+                  {on ? '✓ ' : ''}{tag}
+                </button>
+              )
+            })}
+          </div>
+        )}
         {!planning && (
           <Field label="اسم القسم بالإنجليزية" hint="يُستخدم في معرّف الوصفات الجديدة فقط، مثل Salads">
             <input dir="ltr" value={fields.sectionEn} onChange={(e) => set('sectionEn', e.target.value)} className={INPUT} />
