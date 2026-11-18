@@ -12,6 +12,7 @@ import TitleLinker from './TitleLinker'
 import {
   addPageAsRecipe,
   checkNotebook,
+  checkUntilCaughtUp,
   connectMicrosoft,
   connectPlace,
   linkPageToRecipe,
@@ -147,8 +148,8 @@ export default function OneNotePage() {
                   disabled={busy}
                   onClick={() =>
                     act(async () => {
-                      const s = await checkNotebook()
-                      return `فُحصت ${s.pages} صفحة. ليست في التطبيق: ${s.unlinked}. صفحات لم تعد موجودة: ${s.missing.length}. قُرئت ${s.refreshed} وصفة وتغيّرت ${s.changed}.`
+                      const s = await checkUntilCaughtUp()
+                      return `فُحصت ${s.pages} صفحة. ليست في التطبيق: ${s.unlinked}. صفحات لم تعد موجودة: ${s.missing.length}. قُرئت ${s.refreshed} وصفة وتغيّرت ${s.changed}.${s.waiting ? ` بقيت ${s.waiting} تنتظر القراءة، اضغطي مرة أخرى.` : ''}`
                     })
                   }
                 >

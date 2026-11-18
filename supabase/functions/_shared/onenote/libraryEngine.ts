@@ -193,15 +193,16 @@ export interface CheckSummary {
   missing: string[]
   refreshed: number
   changed: number
+  waiting: number // pages edited (or never read) that this run did not get to; the app asks again
 }
 
 // Lists every page of the notebook. Linked pages that are not listed are checked one by one (a
 // page OneNote still returns stays linked); pages no recipe is linked to are kept for the owner's
 // review; then recipes are read again, a few per check to stay well inside OneNote's request limits
 // and the function's run time (reading one page takes 10-18 seconds, and a run that goes past about
-// 150 seconds is cut off): first the pages edited in OneNote since they were last read, then the
+// 150 seconds is cut off; a run on 2026-11-18 took 150 s and was): first the pages edited in OneNote since they were last read, then the
 // ones read longest ago. No new read starts after `budgetMs`.
-export async function checkLibrary(deps: LibraryDeps, refreshLimit = 5, budgetMs = 80_000, clock: () => number = Date.now): Promise<CheckSummary> {
+export async function checkLibrary(deps: LibraryDeps, refreshLimit = 5, budgetMs = 60_000, clock: () => number = Date.now): Promise<CheckSummary> {
   const { graph, store, now } = deps
   const started = clock()
   const library = await requireLibrary(store)
@@ -240,15 +241,18 @@ export async function checkLibrary(deps: LibraryDeps, refreshLimit = 5, budgetMs
     .slice(0, refreshLimit)
   let changed = 0
   let refreshed = 0
+  const readNow = new Set<string>()
   for (const link of stale) {
     if (refreshed > 0 && clock() - started > budgetMs) break
     const outcome = await refreshRecipe(deps, link.recipeId)
     refreshed += 1
+    readNow.add(link.recipeId)
     if (outcome.result === 'updated') changed += 1
   }
+  const waiting = links.filter((link) => !missing.includes(link.recipeId) && listed.has(link.pageId) && edited(link) && !readNow.has(link.recipeId)).length
 
   await store.saveLibrary({ ...fresh, lastCheckedAt: now().toISOString() })
-  return { pages: pages.length, unlinked: unlinked.length, missing, refreshed, changed }
+  return { pages: pages.length, unlinked: unlinked.length, missing, refreshed, changed, waiting }
 }
 
 async function pageInLibrary(deps: LibraryDeps, library: Library, pageId: string): Promise<{ meta: PageMeta; library: Library }> {

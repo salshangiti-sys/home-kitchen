@@ -221,6 +221,22 @@ describe('the recipe notebook is read and created in, never edited', () => {
     expect(read[2]! > read[1]!).toBe(true)
   })
 
+  it('says how many edited pages it did not get to, so the app can ask again', async () => {
+    await connectLibrary(deps, 'nb-real')
+    const pageIds: string[] = []
+    for (const title of ['أ', 'ب', 'ج']) {
+      const created = await onenote.createPage('sec-rice', page(title, '<p>نص</p>'))
+      pageIds.push(created.id)
+      await addPage(deps, created.id)
+    }
+    for (const id of pageIds) onenote.pages.get(id)!.lastModified = Date.UTC(2026, 9, 27) // all three edited after being read
+    deps = { ...deps, now: () => new Date(Date.UTC(2026, 9, 28)) } // the checks run after the edits, so a read counts
+    const first = await checkLibrary(deps, 2)
+    expect(first).toMatchObject({ refreshed: 2, waiting: 1 })
+    const second = await checkLibrary(deps, 2)
+    expect(second.waiting).toBe(0)
+  })
+
   it('stops starting new reads once the time budget is spent (always reading at least one)', async () => {
     await connectLibrary(deps, 'nb-real')
     for (const title of ['أ', 'ب', 'ج', 'د']) await addPage(deps, (await onenote.createPage('sec-rice', page(title, '<p>نص</p>'))).id)
