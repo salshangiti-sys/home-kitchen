@@ -15,6 +15,7 @@ import {
   checkUntilCaughtUp,
   connectMicrosoft,
   connectPlace,
+  ignorePage,
   linkPageToRecipe,
   listMissing,
   libraryLabel,
@@ -222,7 +223,19 @@ export default function OneNotePage() {
   )
 }
 
-function UnlinkedRow({ page, recipes, busy, act }: { page: UnlinkedPage; recipes: RecipeSummary[]; busy: boolean; act: (work: () => Promise<string | void>) => Promise<void> }) {
+export function UnlinkedRow({
+  page,
+  recipes,
+  busy,
+  act,
+  ignore = ignorePage,
+}: {
+  page: UnlinkedPage
+  recipes: RecipeSummary[]
+  busy: boolean
+  act: (work: () => Promise<string | void>) => Promise<void>
+  ignore?: typeof ignorePage
+}) {
   const [linking, setLinking] = useState(false)
   const [target, setTarget] = useState('')
 
@@ -246,6 +259,18 @@ function UnlinkedRow({ page, recipes, busy, act }: { page: UnlinkedPage; recipes
         </Button>
         <Button kind="plain" disabled={busy} onClick={() => setLinking(!linking)}>اربطيها بوصفة موجودة</Button>
         {page.web_url && <LinkButton external href={page.web_url}>افتحي في OneNote ↗</LinkButton>}
+        <Button
+          kind="plain"
+          disabled={busy}
+          onClick={() =>
+            act(async () => {
+              await ignore(page.page_id)
+              return `تجاهلتُ «${page.title || 'بدون عنوان'}». ليست وصفة، ولن تظهر هنا مرة أخرى. تجدينها في «مراجعة» تحت «الصفحات المتجاهَلة» إن أردتِ إعادتها.`
+            })
+          }
+        >
+          تجاهلي، ليست وصفة
+        </Button>
       </div>
       {linking && (
         <div className="flex flex-wrap gap-2">
