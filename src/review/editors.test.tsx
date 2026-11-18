@@ -13,5 +13,7 @@ describe('TagsEditor', () => {
     expect(onChange).toHaveBeenCalledWith(['دجاج', 'تجهيز مُسبق'])
     fireEvent.click(screen.getByRole('button', { name: 'أضيفي الوسم قلاش' }))
     expect(onChange).toHaveBeenCalledWith(['دجاج', 'قلاش'])
+    fireEvent.click(screen.getByRole('button', { name: 'أضيفي الوسم صوص طماطم' }))
+    expect(onChange).toHaveBeenCalledWith(['دجاج', 'صوص طماطم'])
   })
 })
