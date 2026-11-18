@@ -12,8 +12,8 @@ import { registerHandler, type Op } from '../offline/outbox'
 export type PrepKind = 'defrost' | 'wash_chop' | 'marinade' | 'dough' | 'sauce' | 'garnish' | 'other'
 export type PrepTiming = 'night_before' | 'morning' | 'before_cooking' | 'at_time'
 
-// The order tasks are listed in: thawing first, «أخرى» last.
-export const KINDS: PrepKind[] = ['defrost', 'wash_chop', 'marinade', 'dough', 'sauce', 'garnish', 'other']
+// The order tasks are listed in: thawing first, then dough (made by her, it needs time to rest), «أخرى» last.
+export const KINDS: PrepKind[] = ['defrost', 'dough', 'wash_chop', 'marinade', 'sauce', 'garnish', 'other']
 export const TIMINGS: PrepTiming[] = ['night_before', 'morning', 'before_cooking', 'at_time']
 
 export const KIND_LABELS: Record<PrepKind, string> = {
@@ -239,7 +239,7 @@ const RANK: Record<PrepTiming, number> = { morning: 1, at_time: 2, before_cookin
 
 // Within a day: morning, then the timed ones in time order, then before cooking, then the evening
 // ("tonight") ones for tomorrow's meal. Tasks of the same time go by kind (thawing, chopping,
-// seasoning, dough, sauces, garnish, other), then the order they were written in.
+// dough, chopping, seasoning, sauces, garnish, other), then the order they were written in.
 export function sortTasks(tasks: Task[]): Task[] {
   return [...tasks].sort(
     (a, b) =>
