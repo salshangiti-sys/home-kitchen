@@ -43,6 +43,7 @@ export interface CheckSummary {
   missing: string[]
   refreshed: number
   changed: number
+  waiting?: number // edited or never-read pages the run did not get to (older functions do not say)
 }
 
 export interface RefreshOutcome {
@@ -139,6 +140,18 @@ export async function connectMicrosoft(returnTo: string) {
 
 export const connectPlace = (placeId: string) => call<{ label: string; sections: number }>('connect', { placeId })
 export const checkNotebook = () => call<CheckSummary>('check')
+
+// One check reads only a few pages (OneNote's limits), so after many edits it takes several. This
+// asks again while pages are still waiting and the last run made progress, up to `rounds` runs.
+export async function checkUntilCaughtUp(check: () => Promise<CheckSummary> = checkNotebook, rounds = 6): Promise<CheckSummary> {
+  let total = await check()
+  for (let i = 1; i < rounds && (total.waiting ?? 0) > 0; i++) {
+    const next = await check()
+    total = { ...next, refreshed: total.refreshed + next.refreshed, changed: total.changed + next.changed }
+    if (next.refreshed === 0) break
+  }
+  return total
+}
 export const refreshFromPage = (recipeId: string) => call<RefreshOutcome>('refresh', { recipeId })
 export const addPageAsRecipe = (pageId: string) => call<{ recipeId: string }>('add-page', { pageId })
 export const linkPageToRecipe = (pageId: string, recipeId: string) => call<RefreshOutcome>('link-page', { pageId, recipeId })
@@ -152,7 +165,7 @@ export function checkIfDue(library: LibraryInfo | null, now = Date.now()): Promi
   if (!library || checking) return checking ?? Promise.resolve()
   const last = library.last_checked_at ? Date.parse(library.last_checked_at) : 0
   if (now - last < CHECK_EVERY_MS) return Promise.resolve()
-  checking = checkNotebook()
+  checking = checkUntilCaughtUp()
     .then(() => undefined, () => undefined)
     .finally(() => {
       checking = null
