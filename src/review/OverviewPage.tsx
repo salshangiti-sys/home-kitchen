@@ -6,7 +6,7 @@ import { tintFor } from '../tints'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { href } from '../router'
 import { Badge, Button, Card, LinkButton, Notice } from '../ui'
-import { addPageAsRecipe, checkNotebook, listUnlinked, loadLibrary, refreshFromPage, timeAgo, type CheckSummary, type UnlinkedPage } from '../library/onenote'
+import { addPageAsRecipe, checkUntilCaughtUp, ignorePage, listIgnored, listUnlinked, loadLibrary, refreshFromPage, timeAgo, unignorePage, type CheckSummary, type UnlinkedPage } from '../library/onenote'
 import { sectionsOf } from '../library/sections'
 import { approveRecipe, loadRecipe, saveRecipe, setFlagStatus } from '../library/api'
 import { autofillRecipe } from './apply'
@@ -17,6 +17,7 @@ import { PROBLEM_LABELS, buildOverview, filterRows, loadOverview, problemCounts,
 
 export interface Pending {
   pages: UnlinkedPage[]
+  ignored?: Array<{ page_id: string; title: string }> // pages she chose to ignore: not recipes
   checkedAt: string | null // when the notebook was last looked at
 }
 
@@ -26,6 +27,8 @@ export interface OverviewApi {
   approve: (pageId: string) => Promise<{ recipeId: string; filled: Autofill | null }> // makes the recipe, and fills in a starting set
   approveRecipes: (flagIds: string[]) => Promise<void> // she has reviewed these recipes
   approveOne: (recipeId: string) => Promise<void> // the same, for a recipe that has no waiting flag
+  ignorePage: (pageId: string) => Promise<void> // a page that is not a recipe leaves the list
+  unignorePage: (pageId: string) => Promise<void> // and can come back
   checkNow: () => Promise<CheckSummary>
   refreshFromOneNote: (recipeId: string) => Promise<{ status: 'ok' | 'missing' | 'error'; error: string | null }> // reads the recipe's page now
   setTags: (recipeId: string, tags: string[]) => Promise<void>
@@ -35,8 +38,8 @@ export interface OverviewApi {
 const real: OverviewApi = {
   loadOverview,
   loadPending: async () => {
-    const [pages, library] = await Promise.all([listUnlinked(), loadLibrary()])
-    return { pages, checkedAt: library?.last_checked_at ?? null }
+    const [pages, library, ignored] = await Promise.all([listUnlinked(), loadLibrary(), listIgnored().catch(() => [])])
+    return { pages, ignored, checkedAt: library?.last_checked_at ?? null }
   },
   approve: async (pageId) => {
     const { recipeId } = await addPageAsRecipe(pageId)
@@ -48,7 +51,9 @@ const real: OverviewApi = {
     for (const id of flagIds) await setFlagStatus(id, 'reviewed')
   },
   approveOne: approveRecipe,
-  checkNow: checkNotebook,
+  ignorePage,
+  unignorePage,
+  checkNow: checkUntilCaughtUp,
   refreshFromOneNote: refreshFromPage,
   setTags: async (recipeId, tags) => {
     const loaded = await loadRecipe(recipeId)
@@ -265,12 +270,48 @@ export default function OverviewPage({ api = real }: { canEdit?: boolean; api?: 
                     اعتمدي كوصفة
                   </Button>
                   {page.web_url && <LinkButton external href={page.web_url}>افتحي في OneNote ↗</LinkButton>}
+                  <Button
+                    kind="plain"
+                    disabled={busy}
+                    onClick={() =>
+                      act(async () => {
+                        await api.ignorePage(page.page_id)
+                        return { text: `تجاهلتُ «${page.title || 'بدون عنوان'}». ليست وصفة، ولن تظهر هنا مرة أخرى.` }
+                      })
+                    }
+                  >
+                    تجاهلي، ليست وصفة
+                  </Button>
                 </div>
               </li>
             ))}
           </ul>
         )}
         {pending && pending.pages.length === 0 && <p className="mb-3 text-sm">لا صفحات جديدة تنتظر.</p>}
+        {pending?.ignored && pending.ignored.length > 0 && (
+          <details className="mb-3 text-sm">
+            <summary className="cursor-pointer">الصفحات المتجاهَلة ({pending.ignored.length})</summary>
+            <ul className="mt-2 flex flex-col gap-2">
+              {pending.ignored.map((page) => (
+                <li key={page.page_id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span dir="auto">{page.title || 'بدون عنوان'}</span>
+                  <Button
+                    kind="plain"
+                    disabled={busy}
+                    onClick={() =>
+                      act(async () => {
+                        await api.unignorePage(page.page_id)
+                        return { text: `أعدتُ «${page.title || 'بدون عنوان'}» إلى القائمة، وتظهر هنا بعد الفحص التالي.` }
+                      })
+                    }
+                  >
+                    أعيديها
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <Button
             kind="plain"

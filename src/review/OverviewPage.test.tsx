@@ -16,14 +16,15 @@ const data: OverviewData = {
 }
 const page = { page_id: 'p1', title: 'كبسة الروبيان', section_name: 'أرزاز ومكرونات (سمك)', web_url: 'https://onenote.example/p1' }
 
-type Fake = OverviewApi & { approved: string[]; reviewed: string[]; reviewedNow: string[]; edits: string[]; failWith?: string }
+type Fake = OverviewApi & { approved: string[]; reviewed: string[]; reviewedNow: string[]; ignoredNow: string[]; edits: string[]; failWith?: string }
 
 function fakeApi(pending: Pending = { pages: [], checkedAt: null }): Fake {
-  const state = { pending, approved: [] as string[], reviewed: [] as string[], reviewedNow: [] as string[], edits: [] as string[] }
+  const state = { pending, approved: [] as string[], reviewed: [] as string[], reviewedNow: [] as string[], ignoredNow: [] as string[], edits: [] as string[] }
   const fake: Fake = {
     approved: state.approved,
     reviewed: state.reviewed,
     reviewedNow: state.reviewedNow,
+    ignoredNow: state.ignoredNow,
     edits: state.edits,
     setTags: async (id, tags) => {
       if (fake.failWith) throw new Error(fake.failWith)
@@ -42,6 +43,14 @@ function fakeApi(pending: Pending = { pages: [], checkedAt: null }): Fake {
     },
     approveRecipes: async (ids) => {
       state.reviewed.push(...ids)
+    },
+    ignorePage: async (id) => {
+      state.ignoredNow.push(id)
+      state.pending = { ...state.pending, pages: state.pending.pages.filter((p) => p.page_id !== id), ignored: [...(state.pending.ignored ?? []), { page_id: id, title: 'قائمة تسوّق' }] }
+    },
+    unignorePage: async (id) => {
+      state.ignoredNow.push(`back ${id}`)
+      state.pending = { ...state.pending, ignored: (state.pending.ignored ?? []).filter((p) => p.page_id !== id) }
     },
     approveOne: async (id) => {
       state.reviewedNow.push(id)
@@ -162,6 +171,17 @@ describe('recipes waiting for her approval', () => {
     fireEvent.click(screen.getByRole('button', { name: 'اعتمدي' }))
     await waitFor(() => expect(fake.reviewed).toEqual(['f9']))
     expect(await screen.findByText('اعتُمدت «حلا الاوريو».')).toBeTruthy()
+  })
+
+  it('a page that is not a recipe can be ignored, and brought back', async () => {
+    const fake = fakeApi({ pages: [page], checkedAt: null })
+    render(<OverviewPage api={fake} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'تجاهلي، ليست وصفة' }))
+    await waitFor(() => expect(fake.ignoredNow).toEqual(['p1']))
+    expect(await screen.findByText(/تجاهلتُ «كبسة الروبيان»/)).toBeTruthy()
+    fireEvent.click(await screen.findByText(/الصفحات المتجاهَلة \(1\)/))
+    fireEvent.click(screen.getByRole('button', { name: 'أعيديها' }))
+    await waitFor(() => expect(fake.ignoredNow).toEqual(['p1', 'back p1']))
   })
 
   it('a recipe that never had a flag can be approved too', async () => {
