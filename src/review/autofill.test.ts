@@ -33,6 +33,14 @@ describe('tags from the title and the lines', () => {
   })
 })
 
+describe('the phyllo tag', () => {
+  it('is added when an ingredient is قلاش or جلاش, and not otherwise', () => {
+    expect(tagsFor(input('بوريك', ['قلاش', 'جبنة']))).toContain('قلاش')
+    expect(tagsFor(input('بوريك', ['عجينة جلاش', 'جبنة']))).toContain('قلاش')
+    expect(tagsFor(input('كيك', ['دقيق', 'سكر']))).not.toContain('قلاش')
+  })
+})
+
 describe('food groups', () => {
   it('works them out from the lines, in a fixed order', () => {
     expect(groupsFor(input('إيدام دجاج بالكريمة', ['دجاج', 'بصل', 'كريمة طبخ']))).toEqual(['vegetables', 'protein', 'dairy'])
