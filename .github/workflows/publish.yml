@@ -1,5 +1,5 @@
 # Publishes the app to GitHub Pages (https://salshangiti-sys.github.io/home-kitchen/) every time
-# something is merged into main, but only if the type check and every test pass.
+# something is merged into main, but only if the type check, every test and the browser smoke test pass.
 #
 # - Only main triggers it (never a pull request or a fork), so nothing from outside can run here.
 # - The two VITE_ values are PUBLIC by design (the Supabase address and its publishable key, which
@@ -48,6 +48,13 @@ jobs:
 
       - name: Build for GitHub Pages
         run: npx vite build --mode pages
+
+      # Opens the built app in a real browser at phone size (sign-in screen, RTL, manifest, service
+      # worker). It does not sign in and needs no secret. If the bundle no longer starts, nothing is published.
+      - name: Browser smoke test
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

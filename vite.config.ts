@@ -10,5 +10,6 @@ export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
   test: {
     environment: 'jsdom',
+    exclude: ['**/node_modules/**', 'e2e/**'], // the browser tests are run by Playwright
   },
 }))
