@@ -19,7 +19,7 @@ export const KIND_LABELS: Record<PrepKind, string> = {
   defrost: 'إذابة',
   wash_chop: 'غسل وتقطيع',
   marinade: 'بهارات وتتبيلة',
-  sauce: 'صوص',
+  sauce: 'صوص وحشوات',
   other: 'أخرى',
 }
 
