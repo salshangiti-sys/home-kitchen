@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { docToFields, fieldsToDoc, emptyFields, planningToDoc, platformOf } from './editorFields'
+import { docToFields, fieldsToDoc, emptyFields, planningToDoc, platformOf, splitTags, toggleTag } from './editorFields'
 import { buildFileReport, chunk, parseRecipeFile, summarizeRun, ImportFileError } from './importReport'
 import { isRecipeDoc, recipeErrors } from './validate'
 import { LINK_ONLY, SALAD } from './fixtures'
@@ -67,6 +67,18 @@ describe('editor fields', () => {
     expect(platformOf('https://youtu.be/x')).toBe('youtube')
     expect(platformOf('https://vm.tiktok.com/x')).toBe('tiktok')
     expect(platformOf('not a link')).toBe('other')
+  })
+})
+
+describe('picking from the existing tags', () => {
+  it('splits the field at «،» and «,»', () => {
+    expect(splitTags('لحم مفروم، قلاش, سريع ')).toEqual(['لحم مفروم', 'قلاش', 'سريع'])
+    expect(splitTags('')).toEqual([])
+  })
+  it('turns a tag on at the end, and off again', () => {
+    expect(toggleTag('لحم مفروم', 'قلاش')).toBe('لحم مفروم، قلاش')
+    expect(toggleTag('', 'قلاش')).toBe('قلاش')
+    expect(toggleTag('لحم مفروم، قلاش', 'قلاش')).toBe('لحم مفروم')
   })
 })
 
