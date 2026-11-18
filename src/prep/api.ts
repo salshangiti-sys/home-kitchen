@@ -9,16 +9,18 @@ import { normalizeAr } from '../library/normalize'
 import { addDays } from '../plan/dates'
 import { registerHandler, type Op } from '../offline/outbox'
 
-export type PrepKind = 'defrost' | 'wash_chop' | 'marinade' | 'sauce' | 'garnish' | 'other'
+export type PrepKind = 'defrost' | 'wash_chop' | 'marinade' | 'dough' | 'sauce' | 'garnish' | 'other'
 export type PrepTiming = 'night_before' | 'morning' | 'before_cooking' | 'at_time'
 
-export const KINDS: PrepKind[] = ['defrost', 'wash_chop', 'marinade', 'sauce', 'garnish', 'other']
+// The order tasks are listed in: thawing first, «أخرى» last.
+export const KINDS: PrepKind[] = ['defrost', 'wash_chop', 'marinade', 'dough', 'sauce', 'garnish', 'other']
 export const TIMINGS: PrepTiming[] = ['night_before', 'morning', 'before_cooking', 'at_time']
 
 export const KIND_LABELS: Record<PrepKind, string> = {
   defrost: 'إذابة',
   wash_chop: 'غسل وتقطيع',
   marinade: 'بهارات وتتبيلة',
+  dough: 'العجينة',
   sauce: 'صوص وحشوات',
   garnish: 'للزينة',
   other: 'أخرى',
@@ -70,11 +72,19 @@ const fail = (error: { message: string } | null): void => {
   if (error) throw new Error(error.message)
 }
 
+// By kind in the order of KINDS, then the order they were written in.
+export const kindOrder = (kind: PrepKind): number => {
+  const i = KINDS.indexOf(kind)
+  return i < 0 ? KINDS.length : i
+}
+export const sortByKind = <T extends { kind: PrepKind; position: number }>(items: T[]): T[] =>
+  [...items].sort((a, b) => kindOrder(a.kind) - kindOrder(b.kind) || a.position - b.position)
+
 export const listTemplates = (recipeId: string): Promise<Template[]> =>
   readThrough(`prep-templates:${recipeId}`, async () => {
     const { data, error } = await supabase.from('recipe_prep_templates').select('id,recipe_id,kind,timing,at_time,body,position').eq('recipe_id', recipeId).order('position').order('id')
     fail(error)
-    return data as Template[]
+    return sortByKind(data as Template[])
   })
 
 const TASK_COLUMNS = 'id,planned_meal_id,day,timing,at_time,kind,body,from_template,done_at,done_by,position'
@@ -228,13 +238,15 @@ export const shortTime = (time: string | null) => (time ? time.slice(0, 5) : nul
 const RANK: Record<PrepTiming, number> = { morning: 1, at_time: 2, before_cooking: 3, night_before: 4 }
 
 // Within a day: morning, then the timed ones in time order, then before cooking, then the evening
-// ("tonight") ones for tomorrow's meal.
+// ("tonight") ones for tomorrow's meal. Tasks of the same time go by kind (thawing, chopping,
+// seasoning, dough, sauces, garnish, other), then the order they were written in.
 export function sortTasks(tasks: Task[]): Task[] {
   return [...tasks].sort(
     (a, b) =>
       a.day.localeCompare(b.day) ||
       RANK[a.timing] - RANK[b.timing] ||
       (a.at_time ?? '').localeCompare(b.at_time ?? '') ||
+      kindOrder(a.kind) - kindOrder(b.kind) ||
       a.position - b.position ||
       a.id.localeCompare(b.id),
   )

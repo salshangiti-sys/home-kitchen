@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import { readThrough } from '../offline/readThrough'
 import { usableIngredients, type Suggestion } from '../ingredients/api'
 import { inSection } from '../library/sections'
-import { KIND_LABELS, TIMING_LABELS, type PrepKind, type PrepTiming } from '../prep/api'
+import { KIND_LABELS, TIMING_LABELS, kindOrder, type PrepKind, type PrepTiming } from '../prep/api'
 
 export interface OverviewRecipe {
   id: string
@@ -144,7 +144,7 @@ export function buildOverview(data: OverviewData): OverviewRow[] {
     const written = (lines.get(recipe.id) ?? []).sort((a, b) => a.position - b.position).map((l) => l.text)
     const confirmed = (suggestions.get(recipe.id) ?? []).map((s) => ({ status: 'confirmed', position: s.position, text: s.text }) as Suggestion)
     const used = usableIngredients(written, confirmed)
-    const tasks = (templates.get(recipe.id) ?? []).sort((a, b) => a.position - b.position)
+    const tasks = (templates.get(recipe.id) ?? []).sort((a, b) => kindOrder(a.kind) - kindOrder(b.kind) || a.position - b.position)
     const uncut = tasks.flatMap((t) => uncutVegetables(t.body))
     const tags = recipe.custom_tags ?? []
     const theirFlags = (flags.get(recipe.id) ?? []).filter((f) => REVIEW_FLAGS.includes(f.flag))
